@@ -20,24 +20,24 @@ class Motor : public rclcpp::Node
     private:
         void motor_cmd_callback(const vmc_quadruped_controller::msg::MotorCmd::SharedPtr msg)const{
             vmc_quadruped_controller::msg::MotorData motorData = vmc_quadruped_controller::msg::MotorData();
-            MotorCmd cmd;
-            MotorData data;
-            cmd.id = msg->id;
-            cmd.mode = msg->mode;
-            cmd.tau = msg->tau;
-            cmd.kp = msg->kp;
-            cmd.kd = msg->kd;
-            cmd.q = msg->pos;
-            cmd.dq = msg->vel;
-            serial->sendRecv(&cmd,&data);
-            motorData.id = data.motor_id;
-            motorData.mode = data.mode;
-            motorData.tau = data.tau;
-            motorData.vel = data.dq;
-            motorData.pos = data.q;
-            motorData.temp = data.temp;
-            motorData.error = data.merror;
-            motorData.force = data.footForce;
+            std::shared_ptr<MotorCmd> cmd = std::make_shared<MotorCmd>();
+            std::shared_ptr<MotorData> data = std::make_shared<MotorData>();
+            cmd->id = msg->id;
+            cmd->mode = msg->mode;
+            cmd->tau = msg->tau;
+            cmd->kp = msg->kp;
+            cmd->kd = msg->kd;
+            cmd->q = msg->pos;
+            cmd->dq = msg->vel;
+            serial->sendRecv(cmd.get(),data.get());
+            motorData.id = data->motor_id;
+            motorData.mode = data->mode;
+            motorData.tau = data->tau;
+            motorData.vel = data->dq;
+            motorData.pos = data->q;
+            motorData.temp = data->temp;
+            motorData.error = data->merror;
+            motorData.force = data->footForce;
             publisher->publish(motorData);
         }
 };
