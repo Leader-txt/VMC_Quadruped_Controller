@@ -12,7 +12,7 @@ class Motor : public rclcpp::Node
     rclcpp::Subscription<vmc_quadruped_controller::msg::MotorCmd>::SharedPtr subscription;
     SerialPort* serial;
     public: Motor(): Node("motor"){
-        serial = new SerialPort("/dev/ttyS1");
+        serial = new SerialPort("/dev/ttyS7");
         publisher = this->create_publisher<vmc_quadruped_controller::msg::MotorData>("motor_data",10);
         subscription = this->create_subscription<vmc_quadruped_controller::msg::MotorCmd>(
             "motor_cmd", 10, std::bind(&Motor::motor_cmd_callback, this, std::placeholders::_1));
@@ -22,6 +22,8 @@ class Motor : public rclcpp::Node
             vmc_quadruped_controller::msg::MotorData motorData = vmc_quadruped_controller::msg::MotorData();
             std::shared_ptr<MotorCmd> cmd = std::make_shared<MotorCmd>();
             std::shared_ptr<MotorData> data = std::make_shared<MotorData>();
+            cmd->motorType = MotorType::GO_M8010_6;
+            data->motorType = MotorType::GO_M8010_6;
             cmd->id = msg->id;
             cmd->mode = msg->mode;
             cmd->tau = msg->tau;
