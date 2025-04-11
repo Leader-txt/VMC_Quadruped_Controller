@@ -1,5 +1,7 @@
 #include "kinematics.h"
 
+float rods[4] = {0.15,0.27,0.15,0.27};
+
 VMC_Result VMC_Calculate(VMC_Param* param,float target_pos_x,float target_pos_y,float now_pos_x,float now_pos_y,float now_vel_x,float now_vel_y){
     VMC_Result result;
     result.force_x = param->kp_x * (target_pos_x - now_pos_x) + param->kd_x * (0 - now_vel_x);
