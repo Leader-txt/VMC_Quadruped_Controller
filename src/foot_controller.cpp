@@ -5,12 +5,12 @@ class Foot_Controller : public rclcpp::Node{
     public: Foot_Controller(): Node("foot_controller"){
         cmd.motorType = MotorType::GO_M8010_6;
         serial = new SerialPort("/dev/ttyS7");
-        // std::thread leg0(control_leg,0);
-        // std::thread leg1(control_leg,1);
+        std::thread leg0(control_leg,0);
+        std::thread leg1(control_leg,1);
         std::thread leg2(control_leg,2);
         std::thread leg3(control_leg,3);
-        // leg0.join();
-        // leg1.join();
+        leg0.join();
+        leg1.join();
         leg2.join();
         leg3.join();
     }
@@ -33,13 +33,13 @@ float clip(float var,float maxVal){
 }
 
 void control_leg(uint id){
-    // // start count
-    // auto start = std::chrono::system_clock::now();
-    // int count = 0;
+    // start count
+    auto start = std::chrono::system_clock::now();
+    int count = 0;
     VMC_Param param;
-    param.kp_x = 1000;
+    param.kp_x = 2000;
     param.kd_x = 10;
-    param.kp_y = 100;
+    param.kp_y = 2000;
     param.kd_y = 10;
     // init motor data
     MotorData data_outer,data_inner;
@@ -107,20 +107,20 @@ void control_leg(uint id){
         // outer_tau = clip(outer_tau,0.1);
         // inner_tau = clip(inner_tau,0.1);
         // printf("force_x:%.3f force_y:%.3f outer_tau:%.3f inner_tau:%.3f\r\n",vmcRes.force_x,vmcRes.force_z,outer_tau,inner_tau);
-        // cmd_outer.tau = outer_tau;
-        // cmd_inner.tau = inner_tau;
+        cmd_outer.tau = outer_tau;
+        cmd_inner.tau = inner_tau;
         SendMsg(&data_outer,&cmd_outer);
         SendMsg(&data_inner,&cmd_inner);
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        // // count freq
-        // count ++ ;
-        // auto time_now = std::chrono::system_clock::now();
-        // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(time_now - start);
-        // if(duration.count()>1000){
-        //     std::cout << "id:" << id << " count:" << count << std::endl;
-        //     start = time_now;
-        //     count = 0;
-        // }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        // count freq
+        count ++ ;
+        auto time_now = std::chrono::system_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(time_now - start);
+        if(duration.count()>1000){
+            std::cout << "id:" << id << " count:" << count << std::endl;
+            start = time_now;
+            count = 0;
+        }
     }
     cmd_outer.tau = 0;
     cmd_inner.tau = 0;
