@@ -107,11 +107,11 @@ void control_leg(uint id){
         // outer_tau = clip(outer_tau,0.1);
         // inner_tau = clip(inner_tau,0.1);
         // printf("force_x:%.3f force_y:%.3f outer_tau:%.3f inner_tau:%.3f\r\n",vmcRes.force_x,vmcRes.force_z,outer_tau,inner_tau);
-        cmd_outer.tau = outer_tau;
-        cmd_inner.tau = inner_tau;
+        // cmd_outer.tau = outer_tau;
+        // cmd_inner.tau = inner_tau;
         SendMsg(&data_outer,&cmd_outer);
         SendMsg(&data_inner,&cmd_inner);
-        // std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
         // // count freq
         // count ++ ;
         // auto time_now = std::chrono::system_clock::now();
@@ -126,6 +126,12 @@ void control_leg(uint id){
     cmd_inner.tau = 0;
     SendMsg(&data_outer,&cmd_outer);
     SendMsg(&data_inner,&cmd_inner);
+}
+
+void SerialWorker(){
+    while(rclcpp::ok()){
+
+    }
 }
 
 int main(int argc,char* argv[]){
