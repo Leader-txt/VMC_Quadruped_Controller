@@ -33,9 +33,9 @@ float clip(float var,float maxVal){
 }
 
 void control_leg(uint id){
-    // start count
-    auto start = std::chrono::system_clock::now();
-    int count = 0;
+    // // start count
+    // auto start = std::chrono::system_clock::now();
+    // int count = 0;
     VMC_Param param;
     param.kp_x = 2000;
     param.kd_x = 10;
@@ -111,27 +111,22 @@ void control_leg(uint id){
         cmd_inner.tau = inner_tau;
         SendMsg(&data_outer,&cmd_outer);
         SendMsg(&data_inner,&cmd_inner);
+        // wait for other thread to send messages
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        // count freq
-        count ++ ;
-        auto time_now = std::chrono::system_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(time_now - start);
-        if(duration.count()>1000){
-            std::cout << "id:" << id << " count:" << count << std::endl;
-            start = time_now;
-            count = 0;
-        }
+        // // count freq
+        // count ++ ;
+        // auto time_now = std::chrono::system_clock::now();
+        // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(time_now - start);
+        // if(duration.count()>1000){
+        //     std::cout << "id:" << id << " count:" << count << std::endl;
+        //     start = time_now;
+        //     count = 0;
+        // }
     }
     cmd_outer.tau = 0;
     cmd_inner.tau = 0;
     SendMsg(&data_outer,&cmd_outer);
     SendMsg(&data_inner,&cmd_inner);
-}
-
-void SerialWorker(){
-    while(rclcpp::ok()){
-
-    }
 }
 
 int main(int argc,char* argv[]){
