@@ -10,6 +10,7 @@ include_directories(include)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MotorCmd.msg"
@@ -19,7 +20,7 @@ rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_t
 add_executable(motor src/motor.cpp)
 add_executable(foots src/foot_controller.cpp src/kinematics.cpp)
 ament_target_dependencies(motor rclcpp)
-ament_target_dependencies(foots rclcpp)
+ament_target_dependencies(foots rclcpp sensor_msgs)
 target_link_libraries(motor ${PROJECT_SOURCE_DIR}/lib/libUnitreeMotorSDK_Arm64.so)
 target_link_libraries(foots ${PROJECT_SOURCE_DIR}/lib/libUnitreeMotorSDK_Arm64.so)
 
@@ -31,6 +32,10 @@ install(TARGETS
 install(DIRECTORY
   ${PROJECT_SOURCE_DIR}/lib/
   DESTINATION lib/
+)
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
 )
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

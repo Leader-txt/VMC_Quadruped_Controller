@@ -1,14 +1,15 @@
 #ifndef __FOOT_CONTROLLER_H___
 #define __FOOT_CONTROLLER_H___
-#include "kinematics.h"
-#include "rclcpp/rclcpp.hpp"
 #include <thread>
-#include "serialPort/SerialPort.h"
-#include "unitreeMotor/unitreeMotor.h"
 #include <chrono>
 #include <iostream>
 #include <mutex>
 #include <cstdio>
+#include "kinematics.h"
+#include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/joy.hpp"
+#include "serialPort/SerialPort.h"
+#include "unitreeMotor/unitreeMotor.h"
 #define _USE_MATH_DEFINES 
 #define STAND_UP_ANGLE_1 66
 #define STAND_UP_ANGLE_2 49
