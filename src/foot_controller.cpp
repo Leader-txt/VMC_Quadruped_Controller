@@ -11,10 +11,11 @@ class Foot_Controller : public rclcpp::Node{
         std::thread leg1(&Foot_Controller::control_leg,this,1);
         std::thread leg2(&Foot_Controller::control_leg,this,2);
         std::thread leg3(&Foot_Controller::control_leg,this,3);
-        leg0.join();
-        leg1.join();
-        leg2.join();
-        leg3.join();
+        leg0.detach();
+        leg1.detach();
+        leg2.detach();
+        leg3.detach();
+        RCLCPP_INFO(this->get_logger(), "all thread detached");
     }
     private: void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg){
         // 打印轴和按钮状态
@@ -151,11 +152,11 @@ float clip(float var,float maxVal){
 
 int main(int argc,char* argv[]){
     rclcpp::init(argc,argv);
-	// rclcpp::spin(std::make_shared<Foot_Controller>());
-    rclcpp::executors::MultiThreadedExecutor executor(
-        rclcpp::ExecutorOptions(), 2);
-    executor.add_node(std::make_shared<Foot_Controller>());
-    executor.spin();
+	rclcpp::spin(std::make_shared<Foot_Controller>());
+    // rclcpp::executors::MultiThreadedExecutor executor(
+    //     rclcpp::ExecutorOptions(), 2);
+    // executor.add_node(std::make_shared<Foot_Controller>());
+    // executor.spin();
 	rclcpp::shutdown();
     return 0;
 }
