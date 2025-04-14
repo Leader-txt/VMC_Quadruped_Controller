@@ -2,7 +2,10 @@
 
 class Foot_Controller : public rclcpp::Node{
     rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription;
-
+    bool stand_up_flag = false;
+    float init_pos[4][2];
+    float leg_pos[4][2]; // leg_pos {x,y}
+    bool inited[4]={0,0,0,0};
     public: Foot_Controller(): Node("foot_controller"){
         joy_subscription = this->create_subscription<sensor_msgs::msg::Joy>("joy",10,std::bind(&Foot_Controller::joy_callback,this,std::placeholders::_1));
         cmd.motorType = MotorType::GO_M8010_6;
@@ -15,22 +18,64 @@ class Foot_Controller : public rclcpp::Node{
         leg1.detach();
         leg2.detach();
         leg3.detach();
-        RCLCPP_INFO(this->get_logger(), "all thread detached");
     }
-    private: void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg){
-        // 打印轴和按钮状态
-        RCLCPP_INFO(this->get_logger(), "收到Joy消息:");
-        
-        // 打印所有轴
-        RCLCPP_INFO(this->get_logger(), "轴:");
-        for (size_t i = 0; i < msg->axes.size(); ++i) {
-        RCLCPP_INFO(this->get_logger(), "  轴[%zu]: %.2f", i, msg->axes[i]);
+
+    private: void stand_up(){
+        stand_up_flag = true;
+        // // print leg init pos
+        // for(int i=0;i<4;i++){
+        //     RCLCPP_INFO(this->get_logger(),"leg[%d] x:%.3f y:%.3f",i,leg_pos[i][0],leg_pos[i][1]);
+        // }
+        uint microstep = 200;
+        for(uint i=0;i<microstep && rclcpp::ok();i++){
+            for(int j=0;j<4;j++){
+                leg_pos[j][0] = init_pos[j][0] + (0.0 - init_pos[j][0])*(i/(float)microstep);
+                leg_pos[j][1] = init_pos[j][1] + (0.223 - init_pos[j][1])*(i/(float)microstep);
+                // RCLCPP_INFO(this->get_logger(),"leg[%d] x:%.3f y:%.3f",j,leg_pos[j][0],leg_pos[j][1]);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
+        RCLCPP_INFO(this->get_logger(),"stand_up");
+    }
+
+    private: void sit_down(){
+        stand_up_flag = false;
+        // // print leg init pos
+        // for(int i=0;i<4;i++){
+        //     RCLCPP_INFO(this->get_logger(),"leg[%d] x:%.3f y:%.3f",i,leg_pos[i][0],leg_pos[i][1]);
+        // }
+        uint microstep = 200;
+        for(uint i=0;i<microstep && rclcpp::ok();i++){
+            for(int j=0;j<4;j++){
+                leg_pos[j][0] = init_pos[j][0] + (0.0 - init_pos[j][0])*(1 - i/(float)microstep);
+                leg_pos[j][1] = init_pos[j][1] + (0.223 - init_pos[j][1])*(1 - i/(float)microstep);
+                // RCLCPP_INFO(this->get_logger(),"leg[%d] x:%.3f y:%.3f",j,leg_pos[j][0],leg_pos[j][1]);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        RCLCPP_INFO(this->get_logger(),"sit_down");
+    }
+
+    private: void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg){
+        // // 打印轴和按钮状态
+        // RCLCPP_INFO(this->get_logger(), "收到Joy消息:");
         
-        // 打印所有按钮
-        RCLCPP_INFO(this->get_logger(), "按钮:");
-        for (size_t i = 0; i < msg->buttons.size(); ++i) {
-        RCLCPP_INFO(this->get_logger(), "  按钮[%zu]: %d", i, msg->buttons[i]);
+        // // 打印所有轴
+        // RCLCPP_INFO(this->get_logger(), "轴:");
+        // for (size_t i = 0; i < msg->axes.size(); ++i) {
+        // RCLCPP_INFO(this->get_logger(), "  轴[%zu]: %.2f", i, msg->axes[i]);
+        // }
+        
+        // // 打印所有按钮
+        // RCLCPP_INFO(this->get_logger(), "按钮:");
+        // for (size_t i = 0; i < msg->buttons.size(); ++i) {
+        // RCLCPP_INFO(this->get_logger(), "  按钮[%zu]: %d", i, msg->buttons[i]);
+        // }
+        if(msg->buttons[STAND_UP_BTN]&&!stand_up_flag){
+            stand_up();
+        }
+        if(msg->buttons[SIT_DOWN_BTN]&&stand_up_flag){
+            sit_down();
         }
     }
 
@@ -39,10 +84,10 @@ class Foot_Controller : public rclcpp::Node{
         // auto start = std::chrono::system_clock::now();
         // int count = 0;
         VMC_Param param;
-        param.kp_x = 2000;
-        param.kd_x = 10;
+        param.kp_x = 2500;
+        param.kd_x = 50;
         param.kp_y = 2000;
-        param.kd_y = 10;
+        param.kd_y = 50;
         // init motor data
         MotorData data_outer,data_inner;
         data_outer.motorType = MotorType::GO_M8010_6;
@@ -65,12 +110,6 @@ class Foot_Controller : public rclcpp::Node{
         cmd_inner.kd = 0;
         cmd_inner.q = 0;
         cmd_inner.dq = 0;
-        // send init cmd to motors
-        SendMsg(&data_outer,&cmd_outer);
-        SendMsg(&data_inner,&cmd_inner);
-        // save motor offests
-        float outer_motor_offest = data_outer.q
-            ,inner_motor_offest = data_inner.q;
         // get gear_ratio
         float gear_ratio = queryGearRatio(MotorType::GO_M8010_6);
         // init values
@@ -89,6 +128,10 @@ class Foot_Controller : public rclcpp::Node{
         JacobiResult jocRes;
         // set init pos
         kineRes = Kinematic_Solution(OUTER_MOTOR_OFFEST,INNER_MOTOR_OFFEST,0,0);
+        leg_pos[id][0] = kineRes.pos_x;
+        leg_pos[id][1] = kineRes.pos_z;
+        init_pos[id][0] = kineRes.pos_x;
+        init_pos[id][1] = kineRes.pos_z;
         target_pos_x = kineRes.pos_x;
         target_pos_y = kineRes.pos_z;
         // target_pos_x = 0;
@@ -96,8 +139,28 @@ class Foot_Controller : public rclcpp::Node{
         // // test target pos out
         // std::cout << target_pos_x << "  " << target_pos_y << std::endl;
         // return;
+
+        // auto stretch legs
+        // stretch
+        cmd_outer.tau = 0.07 * dir_outer;
+        cmd_inner.tau = -0.07 * dir_inner;
+        SendMsg(&data_outer,&cmd_outer);
+        SendMsg(&data_inner,&cmd_inner);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // release
+        cmd_outer.tau = 0;
+        cmd_inner.tau = 0;
+        SendMsg(&data_outer,&cmd_outer);
+        SendMsg(&data_inner,&cmd_inner);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // save motor offests
+        float outer_motor_offest = data_outer.q
+            ,inner_motor_offest = data_inner.q;
+        inited[id] = true;
         RCLCPP_INFO(this->get_logger(), "inited leg:%d",id);
         while(rclcpp::ok()){
+            target_pos_x = leg_pos[id][0];
+            target_pos_y = leg_pos[id][1];
             angle_alpha = ((data_outer.q - outer_motor_offest) / gear_ratio)*dir_outer + OUTER_MOTOR_OFFEST;
             angle_beta = ((data_inner.q - inner_motor_offest) / gear_ratio)*dir_inner + INNER_MOTOR_OFFEST;
             vec_alpha = data_outer.dq / gear_ratio * dir_outer;
@@ -126,8 +189,8 @@ class Foot_Controller : public rclcpp::Node{
             //     count = 0;
             // }
         }
-        cmd_outer.tau = 0;
-        cmd_inner.tau = 0;
+        cmd_outer.mode = 0;
+        cmd_inner.mode = 0;
         SendMsg(&data_outer,&cmd_outer);
         SendMsg(&data_inner,&cmd_inner);
     }
