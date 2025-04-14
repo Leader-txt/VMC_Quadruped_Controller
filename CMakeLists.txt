@@ -18,7 +18,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 )
 rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_typesupport_cpp")
 add_executable(motor src/motor.cpp)
-add_executable(foots src/foot_controller.cpp src/kinematics.cpp)
+add_executable(foots src/foot_controller.cpp src/kinematics.cpp src/cycloid.cpp)
 ament_target_dependencies(motor rclcpp)
 ament_target_dependencies(foots rclcpp sensor_msgs)
 target_link_libraries(motor ${PROJECT_SOURCE_DIR}/lib/libUnitreeMotorSDK_Arm64.so)

@@ -3,12 +3,20 @@
 class Foot_Controller : public rclcpp::Node{
     rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription;
     bool stand_up_flag = false;
-    float init_pos[4][2];
-    float leg_pos[4][2]; // leg_pos {x,y}
-    bool inited[4]={0,0,0,0};
+    float init_pos[4][2]
+        ,leg_pos[4][2] // leg_pos {x,y}
+        ,x
+        ,y;
+    bool inited[4]={0,0,0,0}
+        ,running = false
+        ,runner_exists = false;
+    Cycloid cycloid;
     public: Foot_Controller(): Node("foot_controller"){
         joy_subscription = this->create_subscription<sensor_msgs::msg::Joy>("joy",10,std::bind(&Foot_Controller::joy_callback,this,std::placeholders::_1));
-        cmd.motorType = MotorType::GO_M8010_6;
+        cycloid.Length = 0.05;
+        cycloid.Height = 0.06;
+        cycloid.FlightPercent = 0.5;
+        cycloid.BodyHeight = BODY_HEIGHT;
         serial = new SerialPort("/dev/ttyS7");
         std::thread leg0(&Foot_Controller::control_leg,this,0);
         std::thread leg1(&Foot_Controller::control_leg,this,1);
@@ -30,7 +38,7 @@ class Foot_Controller : public rclcpp::Node{
         for(uint i=0;i<microstep && rclcpp::ok();i++){
             for(int j=0;j<4;j++){
                 leg_pos[j][0] = init_pos[j][0] + (0.0 - init_pos[j][0])*(i/(float)microstep);
-                leg_pos[j][1] = init_pos[j][1] + (0.223 - init_pos[j][1])*(i/(float)microstep);
+                leg_pos[j][1] = init_pos[j][1] + (BODY_HEIGHT - init_pos[j][1])*(i/(float)microstep);
                 // RCLCPP_INFO(this->get_logger(),"leg[%d] x:%.3f y:%.3f",j,leg_pos[j][0],leg_pos[j][1]);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -48,12 +56,22 @@ class Foot_Controller : public rclcpp::Node{
         for(uint i=0;i<microstep && rclcpp::ok();i++){
             for(int j=0;j<4;j++){
                 leg_pos[j][0] = init_pos[j][0] + (0.0 - init_pos[j][0])*(1 - i/(float)microstep);
-                leg_pos[j][1] = init_pos[j][1] + (0.223 - init_pos[j][1])*(1 - i/(float)microstep);
+                leg_pos[j][1] = init_pos[j][1] + (BODY_HEIGHT - init_pos[j][1])*(1 - i/(float)microstep);
                 // RCLCPP_INFO(this->get_logger(),"leg[%d] x:%.3f y:%.3f",j,leg_pos[j][0],leg_pos[j][1]);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         RCLCPP_INFO(this->get_logger(),"sit_down");
+    }
+
+    private: void run(){
+        running = true;
+        runner_exists = true;
+        while(running && rclcpp::ok()){
+            RCLCPP_INFO(this->get_logger(),"running");
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+        runner_exists = false;
     }
 
     private: void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg){
@@ -71,11 +89,22 @@ class Foot_Controller : public rclcpp::Node{
         // for (size_t i = 0; i < msg->buttons.size(); ++i) {
         // RCLCPP_INFO(this->get_logger(), "  按钮[%zu]: %d", i, msg->buttons[i]);
         // }
-        if(msg->buttons[STAND_UP_BTN]&&!stand_up_flag){
-            stand_up();
+        if(msg->buttons[STAND_UP_BTN] && !stand_up_flag){
+            if(inited[0]&&inited[1]&&inited[2]&&inited[3])
+                stand_up();
         }
-        if(msg->buttons[SIT_DOWN_BTN]&&stand_up_flag){
+        if(msg->buttons[SIT_DOWN_BTN] && stand_up_flag){
             sit_down();
+        }
+        bool can_run = (abs(msg->axes[AXES_LX])>0.01 || abs(msg->axes[AXES_LY])>0.01);
+        if(/*stand_up_flag &&*/ !running && can_run && !runner_exists){
+            RCLCPP_INFO(this->get_logger(),"start run");
+            std::thread runner(&Foot_Controller::run,this);
+            runner.detach();
+        }
+        else if(running && !can_run){
+            RCLCPP_INFO(this->get_logger(),"end run");
+            running = false;
         }
     }
 

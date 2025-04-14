@@ -10,16 +10,23 @@
 #include "sensor_msgs/msg/joy.hpp"
 #include "serialPort/SerialPort.h"
 #include "unitreeMotor/unitreeMotor.h"
+#include "cycloid.h"
 #define _USE_MATH_DEFINES 
 #define STAND_UP_ANGLE_1 66
 #define STAND_UP_ANGLE_2 49
 #define OUTER_MOTOR_OFFEST -(STAND_UP_ANGLE_1+STAND_UP_ANGLE_2)/180.0*M_PI
 #define INNER_MOTOR_OFFEST M_PI-(STAND_UP_ANGLE_1-STAND_UP_ANGLE_2)/180.0*M_PI
+#define BODY_HEIGHT 0.223
 #define STAND_UP_BTN 7
 #define SIT_DOWN_BTN 6
+#define AXES_LX 0
+#define AXES_LY 1
+#define TRIGGER_LEFT 2
+#define AXES_RX 3
+#define AXES_RY 4
+#define TRIGGER_RIGHT 5
 
 std::mutex lock;
-MotorCmd cmd;
 SerialPort* serial;
 // Front
 // 2 1
