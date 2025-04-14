@@ -5,18 +5,25 @@ class Foot_Controller : public rclcpp::Node{
     bool stand_up_flag = false;
     float init_pos[4][2]
         ,leg_pos[4][2] // leg_pos {x,y}
-        ,x
-        ,y;
+        ,step_x
+        ,step_y;
     bool inited[4]={0,0,0,0}
         ,running = false
         ,runner_exists = false;
     Cycloid cycloid;
+    VMC_Param params[4];
     public: Foot_Controller(): Node("foot_controller"){
         joy_subscription = this->create_subscription<sensor_msgs::msg::Joy>("joy",10,std::bind(&Foot_Controller::joy_callback,this,std::placeholders::_1));
         cycloid.Length = 0.05;
-        cycloid.Height = 0.06;
-        cycloid.FlightPercent = 0.5;
+        cycloid.Height = 0.08;
+        cycloid.FlightPercent = 0.35;
         cycloid.BodyHeight = BODY_HEIGHT;
+        for(int i=0;i<4;i++){
+            params[i].kp_x = 4000;
+            params[i].kd_x = 50;
+            params[i].kp_y = 2000;
+            params[i].kd_y = 50;
+        }
         serial = new SerialPort("/dev/ttyS7");
         std::thread leg0(&Foot_Controller::control_leg,this,0);
         std::thread leg1(&Foot_Controller::control_leg,this,1);
@@ -67,9 +74,89 @@ class Foot_Controller : public rclcpp::Node{
     private: void run(){
         running = true;
         runner_exists = true;
+        float step_length = 0.3;
+        float period = 0.4;
+        double intpart;
+        float t;
+        bool isFlightPercent[4]={0,0,0,0};
+        float flight = 800
+            ,noflight = 3000
+            ,flight_kd = 50
+            ,noflight_kd = 50;
+        CycloidResult res;
         while(running && rclcpp::ok()){
-            RCLCPP_INFO(this->get_logger(),"running");
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            t = modf(rclcpp::Clock().now().seconds()/period,&intpart);
+            cycloid.Length = step_y * step_length + step_x * step_length;
+            res = cycloid.generate(0.25+t);
+            // RCLCPP_INFO(this->get_logger(),"x:%.3f y:%.3f is_fp:%d",res.x,res.y,res.isFlightPercent);
+            if(res.isFlightPercent != isFlightPercent[2]){
+                isFlightPercent[2] = res.isFlightPercent;
+                if(isFlightPercent[2]){
+                    params[2].kp_y=flight;
+                    params[2].kd_y=flight_kd;
+                }
+                else{
+                    params[2].kp_y=noflight;
+                    params[2].kd_y=noflight_kd;
+                }
+            }
+            leg_pos[2][0] = res.x;
+            leg_pos[2][1] = res.y;
+            res = cycloid.generate(0.75+t);
+            if(res.isFlightPercent != isFlightPercent[3]){
+                isFlightPercent[3] = res.isFlightPercent;
+                if(isFlightPercent[3]){
+                    params[3].kp_y=flight;
+                    params[3].kd_y=flight_kd;
+                }
+                else{
+                    params[3].kp_y=noflight;
+                    params[3].kd_y=noflight_kd;
+                }
+            }
+            leg_pos[3][0] = res.x;
+            leg_pos[3][1] = res.y;
+
+            cycloid.Length = step_y * step_length - step_x * step_length;
+            res = cycloid.generate(0.25+t);
+            if(res.isFlightPercent != isFlightPercent[0]){
+                isFlightPercent[0] = res.isFlightPercent;
+                if(isFlightPercent[0]){
+                    params[0].kp_y=flight;
+                    params[0].kd_y=flight_kd;
+                }
+                else{
+                    params[0].kp_y=noflight;
+                    params[0].kd_y=noflight_kd;
+                }
+            }
+            leg_pos[0][0] = res.x;
+            leg_pos[0][1] = res.y;
+            res = cycloid.generate(0.75+t);
+            if(res.isFlightPercent != isFlightPercent[1]){
+                isFlightPercent[1] = res.isFlightPercent;
+                if(isFlightPercent[1]){
+                    params[1].kp_y=flight;
+                    params[1].kd_y=flight_kd;
+                }
+                else{
+                    params[1].kp_y=noflight;
+                    params[1].kd_y=noflight_kd;
+                }
+            }
+            leg_pos[1][0] = res.x;
+            leg_pos[1][1] = res.y;
+            
+            // for(int i=0;i<4;i++){
+            //     RCLCPP_INFO(this->get_logger(),"leg[%d] x:%.3f y:%.3f",i,leg_pos[i][0],leg_pos[i][1]);
+            // }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        for(int i=0;i<4;i++){
+            leg_pos[i][0]=0;
+            leg_pos[i][1]=BODY_HEIGHT;
+            params[i].kp_y = noflight;
+            params[i].kd_y = noflight_kd;
         }
         runner_exists = false;
     }
@@ -96,8 +183,10 @@ class Foot_Controller : public rclcpp::Node{
         if(msg->buttons[SIT_DOWN_BTN] && stand_up_flag){
             sit_down();
         }
+        step_x = msg->axes[AXES_LX];
+        step_y = -msg->axes[AXES_LY];
         bool can_run = (abs(msg->axes[AXES_LX])>0.01 || abs(msg->axes[AXES_LY])>0.01);
-        if(/*stand_up_flag &&*/ !running && can_run && !runner_exists){
+        if(stand_up_flag && !running && can_run && !runner_exists){
             RCLCPP_INFO(this->get_logger(),"start run");
             std::thread runner(&Foot_Controller::run,this);
             runner.detach();
@@ -112,11 +201,11 @@ class Foot_Controller : public rclcpp::Node{
         // // start count
         // auto start = std::chrono::system_clock::now();
         // int count = 0;
-        VMC_Param param;
-        param.kp_x = 2500;
-        param.kd_x = 50;
-        param.kp_y = 2000;
-        param.kd_y = 50;
+        // VMC_Param param;
+        // param.kp_x = 4000;
+        // param.kd_x = 50;
+        // param.kp_y = 1000;
+        // param.kd_y = 50;
         // init motor data
         MotorData data_outer,data_inner;
         data_outer.motorType = MotorType::GO_M8010_6;
@@ -195,7 +284,7 @@ class Foot_Controller : public rclcpp::Node{
             vec_alpha = data_outer.dq / gear_ratio * dir_outer;
             vec_beta = data_inner.dq / gear_ratio * dir_inner;
             kineRes = Kinematic_Solution(angle_alpha,angle_beta,vec_alpha,vec_beta);
-            vmcRes = VMC_Calculate(&param,target_pos_x,target_pos_y,kineRes.pos_x,kineRes.pos_z,kineRes.vec_x,kineRes.vec_z);
+            vmcRes = VMC_Calculate(&params[id],target_pos_x,target_pos_y,kineRes.pos_x,kineRes.pos_z,kineRes.vec_x,kineRes.vec_z);
             jocRes = VMC_Jacobi_Matrix(angle_alpha,angle_beta,vmcRes.force_x,vmcRes.force_z);
             outer_tau = jocRes.tau_alpha / gear_ratio * dir_outer;
             inner_tau = jocRes.tau_beta / gear_ratio * dir_inner;
