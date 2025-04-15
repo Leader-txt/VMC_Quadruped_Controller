@@ -16,13 +16,15 @@ class Foot_Controller : public rclcpp::Node{
         joy_subscription = this->create_subscription<sensor_msgs::msg::Joy>("joy",10,std::bind(&Foot_Controller::joy_callback,this,std::placeholders::_1));
         cycloid.Length = 0.05;
         cycloid.Height = 0.08;
-        cycloid.FlightPercent = 0.35;
+        cycloid.FlightPercent = 0.5;
         cycloid.BodyHeight = BODY_HEIGHT;
         for(int i=0;i<4;i++){
-            params[i].kp_x = 4000;
+            params[i].kp_x = 2000;
             params[i].kd_x = 50;
-            params[i].kp_y = 2000;
+            params[i].kp_y = 500;
             params[i].kd_y = 50;
+            params[i].ki_x = 0;
+            params[i].ki_y = 10;
         }
         serial = new SerialPort("/dev/ttyS7");
         std::thread leg0(&Foot_Controller::control_leg,this,0);
@@ -75,12 +77,12 @@ class Foot_Controller : public rclcpp::Node{
         running = true;
         runner_exists = true;
         float step_length = 0.3;
-        float period = 0.4;
+        float period = 0.5;
         double intpart;
         float t;
         bool isFlightPercent[4]={0,0,0,0};
-        float flight = 800
-            ,noflight = 3000
+        float flight = 1000
+            ,noflight = 1000
             ,flight_kd = 50
             ,noflight_kd = 50;
         CycloidResult res;
@@ -88,7 +90,6 @@ class Foot_Controller : public rclcpp::Node{
             t = modf(rclcpp::Clock().now().seconds()/period,&intpart);
             cycloid.Length = step_y * step_length + step_x * step_length;
             res = cycloid.generate(0.25+t);
-            // RCLCPP_INFO(this->get_logger(),"x:%.3f y:%.3f is_fp:%d",res.x,res.y,res.isFlightPercent);
             if(res.isFlightPercent != isFlightPercent[2]){
                 isFlightPercent[2] = res.isFlightPercent;
                 if(isFlightPercent[2]){
@@ -276,6 +277,8 @@ class Foot_Controller : public rclcpp::Node{
             ,inner_motor_offest = data_inner.q;
         inited[id] = true;
         RCLCPP_INFO(this->get_logger(), "inited leg:%d",id);
+        // init ki
+        params[id].start = rclcpp::Clock().now().seconds();
         while(rclcpp::ok()){
             target_pos_x = leg_pos[id][0];
             target_pos_y = leg_pos[id][1];
@@ -284,10 +287,12 @@ class Foot_Controller : public rclcpp::Node{
             vec_alpha = data_outer.dq / gear_ratio * dir_outer;
             vec_beta = data_inner.dq / gear_ratio * dir_inner;
             kineRes = Kinematic_Solution(angle_alpha,angle_beta,vec_alpha,vec_beta);
+            params[id].period = rclcpp::Clock().now().seconds() - params[id].start;
             vmcRes = VMC_Calculate(&params[id],target_pos_x,target_pos_y,kineRes.pos_x,kineRes.pos_z,kineRes.vec_x,kineRes.vec_z);
             jocRes = VMC_Jacobi_Matrix(angle_alpha,angle_beta,vmcRes.force_x,vmcRes.force_z);
             outer_tau = jocRes.tau_alpha / gear_ratio * dir_outer;
             inner_tau = jocRes.tau_beta / gear_ratio * dir_inner;
+            // RCLCPP_INFO(this->get_logger(),"force_x:%.3f force_y:%.3f",vmcRes.force_x,vmcRes.force_z);
             // outer_tau = clip(outer_tau,0.1);
             // inner_tau = clip(inner_tau,0.1);
             // printf("force_x:%.3f force_y:%.3f outer_tau:%.3f inner_tau:%.3f\r\n",vmcRes.force_x,vmcRes.force_z,outer_tau,inner_tau);
@@ -319,16 +324,6 @@ void SendMsg(MotorData* data,MotorCmd* cmd){
     lock.lock();
     serial->sendRecv(cmd,data);
     lock.unlock();
-}
-
-float clip(float var,float maxVal){
-    if(var < - maxVal){
-        return -maxVal;
-    }
-    if(var > maxVal){
-        return maxVal;
-    }
-    return var;
 }
 
 int main(int argc,char* argv[]){

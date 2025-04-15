@@ -11,7 +11,8 @@ typedef struct{
 } KinematicResult;
 
 typedef struct{
-    float kp_x,kd_x,kp_y,kd_y;
+    double start,period,error_sum_x,error_sum_y;
+    float kp_x,kd_x,kp_y,kd_y,ki_x,ki_y;
 } VMC_Param;
 
 typedef struct{

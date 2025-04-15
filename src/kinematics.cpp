@@ -2,10 +2,25 @@
 
 float rods[4] = {0.15,0.27,0.15,0.27};
 
+double clip(double var,double maxVal){
+    if(var < - maxVal){
+        return -maxVal;
+    }
+    if(var > maxVal){
+        return maxVal;
+    }
+    return var;
+}
+
 VMC_Result VMC_Calculate(VMC_Param* param,float target_pos_x,float target_pos_y,float now_pos_x,float now_pos_y,float now_vel_x,float now_vel_y){
     VMC_Result result;
-    result.force_x = param->kp_x * (target_pos_x - now_pos_x) + param->kd_x * (0 - now_vel_x);
-    result.force_z = param->kp_y * (target_pos_y - now_pos_y) + param->kd_y * (0 - now_vel_y);
+    float error_x = target_pos_x - now_pos_x
+        ,error_y = target_pos_y - now_pos_y;
+    param->error_sum_x += error_x;
+    // param->error_sum_y = clip(param->error_sum_y,100);
+    param->error_sum_y += error_y;
+    result.force_x = param->kp_x * error_x + param->kd_x * (0 - now_vel_x) + param->ki_x*param->error_sum_x/param->period;
+    result.force_z = param->kp_y * error_y + param->kd_y * (0 - now_vel_y) + param->ki_y*param->error_sum_y/param->period;
     return result;
 }
 
