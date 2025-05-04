@@ -4,6 +4,7 @@ project(vmc_quadruped_controller)
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
+
 include_directories(include)
 
 # find dependencies
@@ -12,9 +13,11 @@ find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(sensor_msgs REQUIRED)
 
+
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MotorCmd.msg"
   "msg/MotorData.msg"
+  "msg/MoveCmd.msg"
 )
 rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_typesupport_cpp")
 add_executable(motor src/motor.cpp)
@@ -25,6 +28,7 @@ target_link_libraries(motor ${PROJECT_SOURCE_DIR}/lib/libUnitreeMotorSDK_Arm64.s
 target_link_libraries(foots ${PROJECT_SOURCE_DIR}/lib/libUnitreeMotorSDK_Arm64.so)
 
 target_link_libraries(motor "${cpp_typesupport_target}")
+target_link_libraries(foots "${cpp_typesupport_target}")
 install(TARGETS
   motor
   foots

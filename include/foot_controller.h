@@ -10,6 +10,7 @@
 #include "sensor_msgs/msg/joy.hpp"
 #include "serialPort/SerialPort.h"
 #include "unitreeMotor/unitreeMotor.h"
+#include "vmc_quadruped_controller/msg/move_cmd.hpp"
 #include "cycloid.h"
 #define _USE_MATH_DEFINES 
 #define STAND_UP_ANGLE_1 66
@@ -19,6 +20,7 @@
 #define BODY_HEIGHT 0.223
 #define STAND_UP_BTN 7
 #define SIT_DOWN_BTN 6
+#define CTR_TYPE_BTN 10
 #define AXES_LX 0
 #define AXES_LY 1
 #define TRIGGER_LEFT 2
@@ -26,15 +28,13 @@
 #define AXES_RY 4
 #define TRIGGER_RIGHT 5
 
-std::mutex lock;
-SerialPort* serial;
 // Front
 // 2 1
 // 3 0
 // {outer_motor,inner_motor}
 int motor_id_for_legs[4][2] = {{0,3},{1,2},{6,5},{7,4}};
 int motor_dir[8] = {1,1,-1,-1,1,1,-1,-1};
-void SendMsg(MotorData* data,MotorCmd* cmd);
+void SendMsg(MotorData* data,MotorCmd* cmd,SerialPort* serial);
 void control_leg(uint id);
 
 #endif

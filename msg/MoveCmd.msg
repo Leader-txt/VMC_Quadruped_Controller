@@ -1,0 +1,2 @@
+float32 step_x
+float32 step_y

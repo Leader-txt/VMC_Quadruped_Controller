@@ -2,7 +2,9 @@
 
 class Foot_Controller : public rclcpp::Node{
     rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription;
+    rclcpp::Subscription<vmc_quadruped_controller::msg::MoveCmd>::SharedPtr move_cmd_subscription;
     bool stand_up_flag = false;
+    bool ctrl_by_joy = true;
     float init_pos[4][2]
         ,leg_pos[4][2] // leg_pos {x,y}
         ,step_x
@@ -14,6 +16,7 @@ class Foot_Controller : public rclcpp::Node{
     VMC_Param params[4];
     public: Foot_Controller(): Node("foot_controller"){
         joy_subscription = this->create_subscription<sensor_msgs::msg::Joy>("joy",10,std::bind(&Foot_Controller::joy_callback,this,std::placeholders::_1));
+        move_cmd_subscription = this->create_subscription<vmc_quadruped_controller::msg::MoveCmd>("move_cmd",10,std::bind(&Foot_Controller::move_cmd_callback,this,std::placeholders::_1));
         cycloid.Length = 0.05;
         cycloid.Height = 0.08;
         cycloid.FlightPercent = 0.5;
@@ -21,12 +24,11 @@ class Foot_Controller : public rclcpp::Node{
         for(int i=0;i<4;i++){
             params[i].kp_x = 2000;
             params[i].kd_x = 50;
-            params[i].kp_y = 500;
+            params[i].kp_y = 1000;
             params[i].kd_y = 50;
             params[i].ki_x = 0;
-            params[i].ki_y = 10;
+            params[i].ki_y = 0;
         }
-        serial = new SerialPort("/dev/ttyS7");
         std::thread leg0(&Foot_Controller::control_leg,this,0);
         std::thread leg1(&Foot_Controller::control_leg,this,1);
         std::thread leg2(&Foot_Controller::control_leg,this,2);
@@ -77,14 +79,14 @@ class Foot_Controller : public rclcpp::Node{
         running = true;
         runner_exists = true;
         float step_length = 0.3;
-        float period = 0.5;
+        float period = 0.4;
         double intpart;
         float t;
         bool isFlightPercent[4]={0,0,0,0};
-        float flight = 1000
-            ,noflight = 1000
-            ,flight_kd = 50
-            ,noflight_kd = 50;
+        float flight = 2000
+            ,noflight = 2000
+            ,flight_kd = 80
+            ,noflight_kd = 80;
         CycloidResult res;
         while(running && rclcpp::ok()){
             t = modf(rclcpp::Clock().now().seconds()/period,&intpart);
@@ -151,7 +153,7 @@ class Foot_Controller : public rclcpp::Node{
             // for(int i=0;i<4;i++){
             //     RCLCPP_INFO(this->get_logger(),"leg[%d] x:%.3f y:%.3f",i,leg_pos[i][0],leg_pos[i][1]);
             // }
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         for(int i=0;i<4;i++){
             leg_pos[i][0]=0;
@@ -160,6 +162,24 @@ class Foot_Controller : public rclcpp::Node{
             params[i].kd_y = noflight_kd;
         }
         runner_exists = false;
+    }
+    
+    private: void move_cmd_callback(const vmc_quadruped_controller::msg::MoveCmd::SharedPtr msg){
+        if(!ctrl_by_joy){
+            step_x = msg->step_x;
+            step_y = msg->step_y;
+            RCLCPP_INFO(this->get_logger(),"step_x:%.3f step_y:%.3f",step_x,step_y);
+            bool can_run = (abs(msg->step_x)>0 || abs(msg->step_y)>0);
+            if(stand_up_flag && !running && can_run && !runner_exists){
+                RCLCPP_INFO(this->get_logger(),"start run");
+                std::thread runner(&Foot_Controller::run,this);
+                runner.detach();
+            }
+            else if(running && !can_run){
+                RCLCPP_INFO(this->get_logger(),"end run");
+                running = false;
+            }
+        }
     }
 
     private: void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg){
@@ -184,17 +204,26 @@ class Foot_Controller : public rclcpp::Node{
         if(msg->buttons[SIT_DOWN_BTN] && stand_up_flag){
             sit_down();
         }
-        step_x = msg->axes[AXES_LX];
-        step_y = -msg->axes[AXES_LY];
-        bool can_run = (abs(msg->axes[AXES_LX])>0.01 || abs(msg->axes[AXES_LY])>0.01);
-        if(stand_up_flag && !running && can_run && !runner_exists){
-            RCLCPP_INFO(this->get_logger(),"start run");
-            std::thread runner(&Foot_Controller::run,this);
-            runner.detach();
+        if(msg->buttons[CTR_TYPE_BTN]){
+            ctrl_by_joy = !ctrl_by_joy;
+            if(ctrl_by_joy)
+                RCLCPP_INFO(get_logger(),"switch control type: joy");
+            else
+                RCLCPP_INFO(get_logger(),"switch control type: auto");
         }
-        else if(running && !can_run){
-            RCLCPP_INFO(this->get_logger(),"end run");
-            running = false;
+        if(ctrl_by_joy){
+            step_x = msg->axes[AXES_LX];
+            step_y = -msg->axes[AXES_LY];
+            bool can_run = (abs(msg->axes[AXES_LX])>0 || abs(msg->axes[AXES_LY])>0);
+            if(stand_up_flag && !running && can_run && !runner_exists){
+                RCLCPP_INFO(this->get_logger(),"start run");
+                std::thread runner(&Foot_Controller::run,this);
+                runner.detach();
+            }
+            else if(running && !can_run){
+                RCLCPP_INFO(this->get_logger(),"end run");
+                running = false;
+            }
         }
     }
 
@@ -208,6 +237,21 @@ class Foot_Controller : public rclcpp::Node{
         // param.kp_y = 1000;
         // param.kd_y = 50;
         // init motor data
+        SerialPort* serial;
+        switch(id){
+            case 0:
+                serial = new SerialPort("/dev/ttyS3");
+                break;
+            case 1:
+                serial = new SerialPort("/dev/ttyS7");
+                break;
+            case 2:
+                serial = new SerialPort("/dev/ttyS6");
+                break;
+            case 3:
+                serial = new SerialPort("/dev/ttyS1");
+                break;
+        }
         MotorData data_outer,data_inner;
         data_outer.motorType = MotorType::GO_M8010_6;
         data_inner.motorType = MotorType::GO_M8010_6;
@@ -261,16 +305,16 @@ class Foot_Controller : public rclcpp::Node{
 
         // auto stretch legs
         // stretch
-        cmd_outer.tau = 0.07 * dir_outer;
-        cmd_inner.tau = -0.07 * dir_inner;
-        SendMsg(&data_outer,&cmd_outer);
-        SendMsg(&data_inner,&cmd_inner);
+        cmd_outer.tau = 0.1 * dir_outer;
+        cmd_inner.tau = -0.1 * dir_inner;
+        SendMsg(&data_outer,&cmd_outer,serial);
+        SendMsg(&data_inner,&cmd_inner,serial);
         std::this_thread::sleep_for(std::chrono::seconds(1));
         // release
         cmd_outer.tau = 0;
         cmd_inner.tau = 0;
-        SendMsg(&data_outer,&cmd_outer);
-        SendMsg(&data_inner,&cmd_inner);
+        SendMsg(&data_outer,&cmd_outer,serial);
+        SendMsg(&data_inner,&cmd_inner,serial);
         std::this_thread::sleep_for(std::chrono::seconds(1));
         // save motor offests
         float outer_motor_offest = data_outer.q
@@ -298,10 +342,10 @@ class Foot_Controller : public rclcpp::Node{
             // printf("force_x:%.3f force_y:%.3f outer_tau:%.3f inner_tau:%.3f\r\n",vmcRes.force_x,vmcRes.force_z,outer_tau,inner_tau);
             cmd_outer.tau = outer_tau;
             cmd_inner.tau = inner_tau;
-            SendMsg(&data_outer,&cmd_outer);
-            SendMsg(&data_inner,&cmd_inner);
+            SendMsg(&data_outer,&cmd_outer,serial);
+            SendMsg(&data_inner,&cmd_inner,serial);
             // wait for other thread to send messages
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            // std::this_thread::sleep_for(std::chrono::milliseconds(1));
             // // count freq
             // count ++ ;
             // auto time_now = std::chrono::system_clock::now();
@@ -314,16 +358,14 @@ class Foot_Controller : public rclcpp::Node{
         }
         cmd_outer.mode = 0;
         cmd_inner.mode = 0;
-        SendMsg(&data_outer,&cmd_outer);
-        SendMsg(&data_inner,&cmd_inner);
+        SendMsg(&data_outer,&cmd_outer,serial);
+        SendMsg(&data_inner,&cmd_inner,serial);
     }
 
 };
 
-void SendMsg(MotorData* data,MotorCmd* cmd){
-    lock.lock();
+void SendMsg(MotorData* data,MotorCmd* cmd,SerialPort* serial){
     serial->sendRecv(cmd,data);
-    lock.unlock();
 }
 
 int main(int argc,char* argv[]){
