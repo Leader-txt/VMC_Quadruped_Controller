@@ -1,22 +1,28 @@
 #include "foot_controller.h"
 
 class Foot_Controller : public rclcpp::Node{
-    rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription;
-    rclcpp::Subscription<vmc_quadruped_controller::msg::MoveCmd>::SharedPtr move_cmd_subscription;
-    bool stand_up_flag = false;
-    bool ctrl_by_joy = true;
-    float init_pos[4][2]
-        ,leg_pos[4][2] // leg_pos {x,y}
-        ,step_x
-        ,step_y;
-    bool inited[4]={0,0,0,0}
-        ,running = false
-        ,runner_exists = false;
-    Cycloid cycloid;
-    VMC_Param params[4];
+    private:
+        rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription;
+        rclcpp::Subscription<vmc_quadruped_controller::msg::MoveCmd>::SharedPtr move_cmd_subscription;
+        rclcpp::Subscription<yesense_interface::msg::EulerOnly>::SharedPtr euler_subscription;
+        bool stand_up_flag = false;
+        bool ctrl_by_joy = true;
+        float init_pos[4][2]
+            ,leg_pos[4][2] // leg_pos {x,y}
+            ,step_x
+            ,step_y
+            ,imu_pitch=0
+            ,imu_yaw=0
+            ,target_yaw=360;
+        bool inited[4]={0,0,0,0}
+            ,running = false
+            ,runner_exists = false;
+        Cycloid cycloid;
+        VMC_Param params[4];
     public: Foot_Controller(): Node("foot_controller"){
         joy_subscription = this->create_subscription<sensor_msgs::msg::Joy>("joy",10,std::bind(&Foot_Controller::joy_callback,this,std::placeholders::_1));
         move_cmd_subscription = this->create_subscription<vmc_quadruped_controller::msg::MoveCmd>("move_cmd",10,std::bind(&Foot_Controller::move_cmd_callback,this,std::placeholders::_1));
+        euler_subscription = this->create_subscription<yesense_interface::msg::EulerOnly>("euler_only",10,std::bind(&Foot_Controller::euler_callback,this,std::placeholders::_1));
         cycloid.Length = 0.05;
         cycloid.Height = 0.08;
         cycloid.FlightPercent = 0.5;
@@ -24,7 +30,7 @@ class Foot_Controller : public rclcpp::Node{
         for(int i=0;i<4;i++){
             params[i].kp_x = 2000;
             params[i].kd_x = 50;
-            params[i].kp_y = 1000;
+            params[i].kp_y = 2000;
             params[i].kd_y = 50;
             params[i].ki_x = 0;
             params[i].ki_y = 0;
@@ -38,6 +44,75 @@ class Foot_Controller : public rclcpp::Node{
         leg2.detach();
         leg3.detach();
     }
+    private: void euler_callback(const yesense_interface::msg::EulerOnly::SharedPtr msg){
+        // RCLCPP_INFO(this->get_logger(),"euler:%.3f %.3f %.3f",msg->euler.pitch,msg->euler.roll,msg->euler.yaw);
+        imu_pitch = msg->euler.pitch/180.0*M_PI;
+        imu_yaw = msg->euler.yaw;
+        // RCLCPP_INFO(this->get_logger(),"imu_pitch:%.3f",imu_pitch);
+    }
+    private: void move_cmd_callback(const vmc_quadruped_controller::msg::MoveCmd::SharedPtr msg){
+        if(!ctrl_by_joy){
+            step_x = msg->step_x;
+            step_y = msg->step_y;
+            RCLCPP_INFO(this->get_logger(),"step_x:%.3f step_y:%.3f",step_x,step_y);
+            bool can_run = (abs(msg->step_x)>0 || abs(msg->step_y)>0);
+            if(stand_up_flag && !running && can_run && !runner_exists){
+                RCLCPP_INFO(this->get_logger(),"start run");
+                std::thread runner(&Foot_Controller::run,this);
+                runner.detach();
+            }
+            else if(running && !can_run){
+                RCLCPP_INFO(this->get_logger(),"end run");
+                running = false;
+            }
+        }
+    }
+
+    private: void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg){
+        // // 打印轴和按钮状态
+        // RCLCPP_INFO(this->get_logger(), "收到Joy消息:");
+        
+        // // 打印所有轴
+        // RCLCPP_INFO(this->get_logger(), "轴:");
+        // for (size_t i = 0; i < msg->axes.size(); ++i) {
+        // RCLCPP_INFO(this->get_logger(), "  轴[%zu]: %.2f", i, msg->axes[i]);
+        // }
+        
+        // // 打印所有按钮
+        // RCLCPP_INFO(this->get_logger(), "按钮:");
+        // for (size_t i = 0; i < msg->buttons.size(); ++i) {
+        // RCLCPP_INFO(this->get_logger(), "  按钮[%zu]: %d", i, msg->buttons[i]);
+        // }
+        if(msg->buttons[STAND_UP_BTN] && !stand_up_flag){
+            if(inited[0]&&inited[1]&&inited[2]&&inited[3])
+                stand_up();
+        }
+        if(msg->buttons[SIT_DOWN_BTN] && stand_up_flag){
+            sit_down();
+        }
+        if(msg->buttons[CTR_TYPE_BTN]){
+            ctrl_by_joy = !ctrl_by_joy;
+            if(ctrl_by_joy)
+                RCLCPP_INFO(get_logger(),"switch control type: joy");
+            else
+                RCLCPP_INFO(get_logger(),"switch control type: auto");
+        }
+        if(ctrl_by_joy){
+            step_x = msg->axes[AXES_LX];
+            step_y = -msg->axes[AXES_LY];
+            bool can_run = (abs(msg->axes[AXES_LX])>0 || abs(msg->axes[AXES_LY])>0);
+            if(stand_up_flag && !running && can_run && !runner_exists){
+                RCLCPP_INFO(this->get_logger(),"start run");
+                std::thread runner(&Foot_Controller::run,this);
+                runner.detach();
+            }
+            else if(running && !can_run){
+                RCLCPP_INFO(this->get_logger(),"end run");
+                running = false;
+            }
+        }
+    }
+
 
     private: void stand_up(){
         stand_up_flag = true;
@@ -163,70 +238,6 @@ class Foot_Controller : public rclcpp::Node{
         }
         runner_exists = false;
     }
-    
-    private: void move_cmd_callback(const vmc_quadruped_controller::msg::MoveCmd::SharedPtr msg){
-        if(!ctrl_by_joy){
-            step_x = msg->step_x;
-            step_y = msg->step_y;
-            RCLCPP_INFO(this->get_logger(),"step_x:%.3f step_y:%.3f",step_x,step_y);
-            bool can_run = (abs(msg->step_x)>0 || abs(msg->step_y)>0);
-            if(stand_up_flag && !running && can_run && !runner_exists){
-                RCLCPP_INFO(this->get_logger(),"start run");
-                std::thread runner(&Foot_Controller::run,this);
-                runner.detach();
-            }
-            else if(running && !can_run){
-                RCLCPP_INFO(this->get_logger(),"end run");
-                running = false;
-            }
-        }
-    }
-
-    private: void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg){
-        // // 打印轴和按钮状态
-        // RCLCPP_INFO(this->get_logger(), "收到Joy消息:");
-        
-        // // 打印所有轴
-        // RCLCPP_INFO(this->get_logger(), "轴:");
-        // for (size_t i = 0; i < msg->axes.size(); ++i) {
-        // RCLCPP_INFO(this->get_logger(), "  轴[%zu]: %.2f", i, msg->axes[i]);
-        // }
-        
-        // // 打印所有按钮
-        // RCLCPP_INFO(this->get_logger(), "按钮:");
-        // for (size_t i = 0; i < msg->buttons.size(); ++i) {
-        // RCLCPP_INFO(this->get_logger(), "  按钮[%zu]: %d", i, msg->buttons[i]);
-        // }
-        if(msg->buttons[STAND_UP_BTN] && !stand_up_flag){
-            if(inited[0]&&inited[1]&&inited[2]&&inited[3])
-                stand_up();
-        }
-        if(msg->buttons[SIT_DOWN_BTN] && stand_up_flag){
-            sit_down();
-        }
-        if(msg->buttons[CTR_TYPE_BTN]){
-            ctrl_by_joy = !ctrl_by_joy;
-            if(ctrl_by_joy)
-                RCLCPP_INFO(get_logger(),"switch control type: joy");
-            else
-                RCLCPP_INFO(get_logger(),"switch control type: auto");
-        }
-        if(ctrl_by_joy){
-            step_x = msg->axes[AXES_LX];
-            step_y = -msg->axes[AXES_LY];
-            bool can_run = (abs(msg->axes[AXES_LX])>0 || abs(msg->axes[AXES_LY])>0);
-            if(stand_up_flag && !running && can_run && !runner_exists){
-                RCLCPP_INFO(this->get_logger(),"start run");
-                std::thread runner(&Foot_Controller::run,this);
-                runner.detach();
-            }
-            else if(running && !can_run){
-                RCLCPP_INFO(this->get_logger(),"end run");
-                running = false;
-            }
-        }
-    }
-
     private: void control_leg(uint id){
         // // start count
         // auto start = std::chrono::system_clock::now();
@@ -371,10 +382,6 @@ void SendMsg(MotorData* data,MotorCmd* cmd,SerialPort* serial){
 int main(int argc,char* argv[]){
     rclcpp::init(argc,argv);
 	rclcpp::spin(std::make_shared<Foot_Controller>());
-    // rclcpp::executors::MultiThreadedExecutor executor(
-    //     rclcpp::ExecutorOptions(), 2);
-    // executor.add_node(std::make_shared<Foot_Controller>());
-    // executor.spin();
 	rclcpp::shutdown();
     return 0;
 }

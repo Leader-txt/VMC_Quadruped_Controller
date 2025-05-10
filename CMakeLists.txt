@@ -12,26 +12,34 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(yesense_interface REQUIRED)
 
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MotorCmd.msg"
   "msg/MotorData.msg"
   "msg/MoveCmd.msg"
+  "msg/AngleReq.msg"
+  "msg/AngleCb.msg"
 )
 rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_typesupport_cpp")
 add_executable(motor src/motor.cpp)
 add_executable(foots src/foot_controller.cpp src/kinematics.cpp src/cycloid.cpp)
+add_executable(navigator src/navigator.cpp src/pid.cpp)
 ament_target_dependencies(motor rclcpp)
-ament_target_dependencies(foots rclcpp sensor_msgs)
+ament_target_dependencies(foots rclcpp sensor_msgs yesense_interface)
+ament_target_dependencies(navigator rclcpp sensor_msgs yesense_interface Eigen3)
 target_link_libraries(motor ${PROJECT_SOURCE_DIR}/lib/libUnitreeMotorSDK_Arm64.so)
 target_link_libraries(foots ${PROJECT_SOURCE_DIR}/lib/libUnitreeMotorSDK_Arm64.so)
 
 target_link_libraries(motor "${cpp_typesupport_target}")
 target_link_libraries(foots "${cpp_typesupport_target}")
+target_link_libraries(navigator "${cpp_typesupport_target}")
 install(TARGETS
   motor
   foots
+  navigator
   DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY
   ${PROJECT_SOURCE_DIR}/lib/

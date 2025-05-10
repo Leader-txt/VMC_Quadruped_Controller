@@ -11,6 +11,7 @@
 #include "serialPort/SerialPort.h"
 #include "unitreeMotor/unitreeMotor.h"
 #include "vmc_quadruped_controller/msg/move_cmd.hpp"
+#include "yesense_interface/msg/euler_only.hpp"
 #include "cycloid.h"
 #define _USE_MATH_DEFINES 
 #define STAND_UP_ANGLE_1 66
