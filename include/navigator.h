@@ -13,3 +13,5 @@
 #include "vmc_quadruped_controller/msg/angle_cb.hpp"
 #include "vmc_quadruped_controller/msg/pos_req.hpp"
 #include <cmath>
+
+#define _USE_MATH_DEFINES 

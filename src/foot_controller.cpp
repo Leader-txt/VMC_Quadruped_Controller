@@ -154,7 +154,7 @@ class Foot_Controller : public rclcpp::Node{
         running = true;
         runner_exists = true;
         float step_length = 0.3;
-        float period = 0.4;
+        float period = 0.5;
         double intpart;
         float t;
         bool isFlightPercent[4]={0,0,0,0};

@@ -31,7 +31,7 @@ class Navigator : public rclcpp::Node{
             tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
             tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
             timer_ = this->create_wall_timer(
-                std::chrono::milliseconds(100),
+                std::chrono::milliseconds(10),
                 std::bind(&Navigator::timer_callback, this));
             pos_subscription_ = this->create_subscription<vmc_quadruped_controller::msg::PosReq>(
                 "pos_req", 10, std::bind(&Navigator::pos_callback, this, std::placeholders::_1));
@@ -40,7 +40,7 @@ class Navigator : public rclcpp::Node{
             //     "euler_only", 10, std::bind(&Navigator::imu_callback, this, std::placeholders::_1));
             // angle_subscription_ = this->create_subscription<vmc_quadruped_controller::msg::AngleReq>(
             //     "angle_req", 10, std::bind(&Navigator::angle_callback, this, std::placeholders::_1));
-            // move_pub = this->create_publisher<vmc_quadruped_controller::msg::MoveCmd>("move_cmd", 10);
+            move_pub = this->create_publisher<vmc_quadruped_controller::msg::MoveCmd>("move_cmd", 10);
             pid = new PID(0.01,0,0.09,0.1);
         }
     private:
@@ -79,7 +79,7 @@ class Navigator : public rclcpp::Node{
             // Process the angle request
             target_point_in_map.x = msg->x;
             target_point_in_map.y = msg->y;
-
+            need_move = true;
             RCLCPP_INFO(this->get_logger(), 
                 "Transform from 'map' to 'body':\n"
                 "Translation: [%.2f, %.2f, %.2f]\n"
@@ -103,8 +103,8 @@ class Navigator : public rclcpp::Node{
                 // 查找从"base_link"到"odom"的变换
                 transform = 
                     tf_buffer_->lookupTransform(
-                        "body",       // 目标坐标系
-                        "map",  // 源坐标系
+                        "map",       // 目标坐标系
+                        "body",  // 源坐标系
                         tf2::TimePointZero);  // 获取最新可用的变换
                 
                 // RCLCPP_INFO(this->get_logger(), 
@@ -118,7 +118,41 @@ class Navigator : public rclcpp::Node{
                 //     transform.transform.rotation.y,
                 //     transform.transform.rotation.z,
                 //     transform.transform.rotation.w);
-            } catch (tf2::TransformException &ex) {
+
+                if(need_move){
+                    geometry_msgs::msg::Vector3 relative_vector = calculate_relative_vector(transform,target_point_in_map);
+                    /*
+                        for SLAM coordinates , 
+                        x points from lidar to left side of dog ,
+                        y points from lidar to back side of dog ,
+                        which look likes follow:
+                        <---- X ---+
+                                   |
+                                   |
+                                   Y
+                                   |
+                                  \|/
+                        but the best coordinates likes follow:
+                                  /|\
+                                   |
+                                   X
+                                   |
+                                   |
+                                   +---- Y --->
+                        so , (x,y) -> (-y,-x) 
+                    */
+                    float angle = atan2(relative_vector.y, relative_vector.x);
+                    angle = angle/M_PI * 180.0;
+                    move_cmd.step_x = pid->calculate(0,angle);
+                    move_pub->publish(move_cmd);
+                    RCLCPP_INFO(this->get_logger(), "step_x: %.2f angle:%.2f x:%.2f y:%.2f", move_cmd.step_x,angle,relative_vector.x, relative_vector.y);
+                    if(abs(angle) < 10){
+                        move_cmd.step_x = 0;
+                        move_pub->publish(move_cmd);
+                        need_move = false;
+                    }
+                }
+            } catch (std::exception &ex) {
                 RCLCPP_WARN(this->get_logger(), "Could not get transform: %s", ex.what());
             }
         }
