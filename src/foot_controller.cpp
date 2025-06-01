@@ -9,6 +9,8 @@ class Foot_Controller : public rclcpp::Node{
         bool ctrl_by_joy = true;
         float init_pos[4][2]
             ,leg_pos[4][2] // leg_pos {x,y}
+            ,period = NORMAL_GAIT_PERIOD
+            ,BODY_HEIGHT = NORMAL_GAIT_BODY_HEIGHT
             ,step_x
             ,step_y
             ,imu_pitch=0
@@ -24,16 +26,16 @@ class Foot_Controller : public rclcpp::Node{
         move_cmd_subscription = this->create_subscription<vmc_quadruped_controller::msg::MoveCmd>("move_cmd",10,std::bind(&Foot_Controller::move_cmd_callback,this,std::placeholders::_1));
         euler_subscription = this->create_subscription<yesense_interface::msg::EulerOnly>("euler_only",10,std::bind(&Foot_Controller::euler_callback,this,std::placeholders::_1));
         cycloid.Length = 0.05;
-        cycloid.Height = 0.08;
-        cycloid.FlightPercent = 0.5;
-        cycloid.BodyHeight = BODY_HEIGHT;
+        cycloid.Height = NORMAL_GAIT_HEIGHT;
+        cycloid.FlightPercent = NORMAL_GAIT_FLIGHT_PERCENT;
+        cycloid.BodyHeight = NORMAL_GAIT_BODY_HEIGHT;
         for(int i=0;i<4;i++){
-            params[i].kp_x = 2000;
-            params[i].kd_x = 50;
-            params[i].kp_y = 2000;
-            params[i].kd_y = 50;
-            params[i].ki_x = 0;
-            params[i].ki_y = 0;
+            params[i].kp_x = INIT_KP_X;
+            params[i].ki_x = INIT_KI_X;
+            params[i].kd_x = INIT_KD_X;
+            params[i].kp_y = INIT_KP_Y;
+            params[i].ki_y = INIT_KI_Y;
+            params[i].kd_y = INIT_KD_Y;
         }
         std::thread leg0(&Foot_Controller::control_leg,this,0);
         std::thread leg1(&Foot_Controller::control_leg,this,1);
@@ -90,6 +92,48 @@ class Foot_Controller : public rclcpp::Node{
         if(msg->buttons[SIT_DOWN_BTN] && stand_up_flag){
             sit_down();
         }
+        if(msg->buttons[NORMAL_GAIT_BTN]){
+            BODY_HEIGHT = NORMAL_GAIT_BODY_HEIGHT;
+            cycloid.Height = NORMAL_GAIT_HEIGHT;
+            cycloid.FlightPercent = NORMAL_GAIT_FLIGHT_PERCENT;
+            cycloid.BodyHeight = NORMAL_GAIT_BODY_HEIGHT;
+            period = NORMAL_GAIT_PERIOD;
+            if(stand_up_flag)
+                for(int i=0;i<4;i++){
+                    leg_pos[i][0]=0;
+                    leg_pos[i][1]=BODY_HEIGHT;
+                }
+            RCLCPP_INFO(this->get_logger(),"switch to normal gait");
+        }
+        if(msg->buttons[STEP_GAIT_BTN]){
+            BODY_HEIGHT = STEP_GAIT_BODY_HEIGHT;
+            cycloid.Height = STEP_GAIT_HEIGHT;
+            cycloid.FlightPercent = STEP_GAIT_FLIGHT_PERCENT;
+            cycloid.BodyHeight = STEP_GAIT_BODY_HEIGHT;
+            period = STEP_GAIT_PERIOD;
+            if(stand_up_flag)
+                for(int i=0;i<4;i++){
+                    leg_pos[i][0]=0;
+                    leg_pos[i][1]=BODY_HEIGHT;
+                }
+            RCLCPP_INFO(this->get_logger(),"switch to step gait");
+        }
+        if(msg->buttons[LOWER_GAIT_BTN]){
+            BODY_HEIGHT = LOWER_GAIT_BODY_HEIGHT;
+            cycloid.Height = LOWER_GAIT_HEIGHT;
+            cycloid.FlightPercent = LOWER_GAIT_FLIGHT_PERCENT;
+            cycloid.BodyHeight = LOWER_GAIT_BODY_HEIGHT;
+            period = LOWER_GAIT_PERIOD;
+            if(stand_up_flag)
+                for(int i=0;i<4;i++){
+                    leg_pos[i][0]=0;
+                    leg_pos[i][1]=BODY_HEIGHT;
+                }
+            RCLCPP_INFO(this->get_logger(),"switch to lower gait");
+        }
+        if(msg->buttons[JUMP_BTN] && stand_up_flag && !running && !runner_exists){
+            // jump();
+        }
         if(msg->buttons[CTR_TYPE_BTN]){
             ctrl_by_joy = !ctrl_by_joy;
             if(ctrl_by_joy)
@@ -98,9 +142,10 @@ class Foot_Controller : public rclcpp::Node{
                 RCLCPP_INFO(get_logger(),"switch control type: auto");
         }
         if(ctrl_by_joy){
-            step_x = msg->axes[AXES_LX];
-            step_y = -msg->axes[AXES_LY];
-            bool can_run = (abs(msg->axes[AXES_LX])>0 || abs(msg->axes[AXES_LY])>0);
+            step_x = msg->axes[AXES_LX]/2;
+            step_y = -msg->axes[AXES_LY];//( msg->axes[TRIGGER_RIGHT] - 1 )/2.0f - ( msg->axes[TRIGGER_LEFT] - 1 )/2.0f;
+            bool can_run = (abs(step_x)>0 || abs(step_y)>0);
+            // RCLCPP_INFO(this->get_logger(),"step_x:%.3f step_y:%.3f",step_x,step_y);
             if(stand_up_flag && !running && can_run && !runner_exists){
                 RCLCPP_INFO(this->get_logger(),"start run");
                 std::thread runner(&Foot_Controller::run,this);
@@ -113,6 +158,55 @@ class Foot_Controller : public rclcpp::Node{
         }
     }
 
+    private: void jump(){
+        RCLCPP_INFO(this->get_logger(),"start jump");
+        // ready for jump
+        for(int i=0;i<4;i++){
+            params[i].kp_y = 3000;
+            leg_pos[i][0] = 0;
+            leg_pos[i][1] = 0.15;
+        }
+        // jump
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        params[0].kp_y = 4000;
+        params[0].kd_y = 40;
+        leg_pos[0][0] = -0.1;
+        leg_pos[0][1] = BODY_HEIGHT;
+
+        params[1].kp_y = 3500;
+        params[1].kd_y = 40;
+        leg_pos[1][0] = -0.1;
+        leg_pos[1][1] = BODY_HEIGHT;
+
+        params[2].kp_y = 3500;
+        params[2].kd_y = 40;
+        leg_pos[2][0] = -0.1;
+        leg_pos[2][1] = BODY_HEIGHT;
+
+        params[3].kp_y = 4000;
+        params[3].kd_y = 40;
+        leg_pos[3][0] = -0.1;
+        leg_pos[3][1] = BODY_HEIGHT;
+        // fall down
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        for(int i=0;i<4;i++){
+            params[i].kp_y = 800;
+            params[i].kd_y = 40;
+            params[i].kp_x = 800;
+            params[i].kd_x = 40;
+            params[i].kp_x = INIT_KP_X;
+            leg_pos[i][0] = 0;
+        }
+        // release
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        for(int i=0;i<4;i++){
+            params[i].kp_y = INIT_KP_Y;
+            params[i].kd_y = INIT_KD_Y;
+            params[i].kp_x = INIT_KP_X;
+            params[i].kd_x = INIT_KD_X;
+        }
+        RCLCPP_INFO(this->get_logger(),"end jump");
+    }
 
     private: void stand_up(){
         stand_up_flag = true;
@@ -153,75 +247,74 @@ class Foot_Controller : public rclcpp::Node{
     private: void run(){
         running = true;
         runner_exists = true;
-        float step_length = 0.3;
-        float period = 0.5;
+        float step_length = 0.30;
         double intpart;
         float t;
         bool isFlightPercent[4]={0,0,0,0};
-        float flight = 2000
-            ,noflight = 2000
-            ,flight_kd = 80
-            ,noflight_kd = 80;
+        // float flight = 2000
+        //     ,noflight = 2000
+        //     ,flight_kd = 80
+        //     ,noflight_kd = 80;
         CycloidResult res;
         while(running && rclcpp::ok()){
             t = modf(rclcpp::Clock().now().seconds()/period,&intpart);
             cycloid.Length = step_y * step_length + step_x * step_length;
             res = cycloid.generate(0.25+t);
-            if(res.isFlightPercent != isFlightPercent[2]){
-                isFlightPercent[2] = res.isFlightPercent;
-                if(isFlightPercent[2]){
-                    params[2].kp_y=flight;
-                    params[2].kd_y=flight_kd;
-                }
-                else{
-                    params[2].kp_y=noflight;
-                    params[2].kd_y=noflight_kd;
-                }
-            }
+            // if(res.isFlightPercent != isFlightPercent[2]){
+            //     isFlightPercent[2] = res.isFlightPercent;
+            //     if(isFlightPercent[2]){
+            //         params[2].kp_y=flight;
+            //         params[2].kd_y=flight_kd;
+            //     }
+            //     else{
+            //         params[2].kp_y=noflight;
+            //         params[2].kd_y=noflight_kd;
+            //     }
+            // }
             leg_pos[2][0] = res.x;
             leg_pos[2][1] = res.y;
             res = cycloid.generate(0.75+t);
-            if(res.isFlightPercent != isFlightPercent[3]){
-                isFlightPercent[3] = res.isFlightPercent;
-                if(isFlightPercent[3]){
-                    params[3].kp_y=flight;
-                    params[3].kd_y=flight_kd;
-                }
-                else{
-                    params[3].kp_y=noflight;
-                    params[3].kd_y=noflight_kd;
-                }
-            }
+            // if(res.isFlightPercent != isFlightPercent[3]){
+            //     isFlightPercent[3] = res.isFlightPercent;
+            //     if(isFlightPercent[3]){
+            //         params[3].kp_y=flight;
+            //         params[3].kd_y=flight_kd;
+            //     }
+            //     else{
+            //         params[3].kp_y=noflight;
+            //         params[3].kd_y=noflight_kd;
+            //     }
+            // }
             leg_pos[3][0] = res.x;
             leg_pos[3][1] = res.y;
 
             cycloid.Length = step_y * step_length - step_x * step_length;
             res = cycloid.generate(0.25+t);
-            if(res.isFlightPercent != isFlightPercent[0]){
-                isFlightPercent[0] = res.isFlightPercent;
-                if(isFlightPercent[0]){
-                    params[0].kp_y=flight;
-                    params[0].kd_y=flight_kd;
-                }
-                else{
-                    params[0].kp_y=noflight;
-                    params[0].kd_y=noflight_kd;
-                }
-            }
+            // if(res.isFlightPercent != isFlightPercent[0]){
+            //     isFlightPercent[0] = res.isFlightPercent;
+            //     if(isFlightPercent[0]){
+            //         params[0].kp_y=flight;
+            //         params[0].kd_y=flight_kd;
+            //     }
+            //     else{
+            //         params[0].kp_y=noflight;
+            //         params[0].kd_y=noflight_kd;
+            //     }
+            // }
             leg_pos[0][0] = res.x;
             leg_pos[0][1] = res.y;
             res = cycloid.generate(0.75+t);
-            if(res.isFlightPercent != isFlightPercent[1]){
-                isFlightPercent[1] = res.isFlightPercent;
-                if(isFlightPercent[1]){
-                    params[1].kp_y=flight;
-                    params[1].kd_y=flight_kd;
-                }
-                else{
-                    params[1].kp_y=noflight;
-                    params[1].kd_y=noflight_kd;
-                }
-            }
+            // if(res.isFlightPercent != isFlightPercent[1]){
+            //     isFlightPercent[1] = res.isFlightPercent;
+            //     if(isFlightPercent[1]){
+            //         params[1].kp_y=flight;
+            //         params[1].kd_y=flight_kd;
+            //     }
+            //     else{
+            //         params[1].kp_y=noflight;
+            //         params[1].kd_y=noflight_kd;
+            //     }
+            // }
             leg_pos[1][0] = res.x;
             leg_pos[1][1] = res.y;
             
@@ -233,8 +326,8 @@ class Foot_Controller : public rclcpp::Node{
         for(int i=0;i<4;i++){
             leg_pos[i][0]=0;
             leg_pos[i][1]=BODY_HEIGHT;
-            params[i].kp_y = noflight;
-            params[i].kd_y = noflight_kd;
+            // params[i].kp_y = noflight;
+            // params[i].kd_y = noflight_kd;
         }
         runner_exists = false;
     }

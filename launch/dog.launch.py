@@ -31,9 +31,9 @@ def generate_launch_description():
             executable='foots',
             output='log'
         ),
-        Node(
-            package='vmc_quadruped_controller',
-            executable='navigator',
-            output='log'
-        )
+        # Node(
+        #     package='vmc_quadruped_controller',
+        #     executable='navigator',
+        #     output='log'
+        # )
     ])
