@@ -7,6 +7,7 @@ class Foot_Controller : public rclcpp::Node{
         rclcpp::Subscription<yesense_interface::msg::EulerOnly>::SharedPtr euler_subscription;
         bool stand_up_flag = false;
         bool ctrl_by_joy = true;
+        bool use_imu_pitch = false;
         float init_pos[4][2]
             ,leg_pos[4][2] // leg_pos {x,y}
             ,period = NORMAL_GAIT_PERIOD
@@ -91,6 +92,13 @@ class Foot_Controller : public rclcpp::Node{
         }
         if(msg->buttons[SIT_DOWN_BTN] && stand_up_flag){
             sit_down();
+        }
+        if(msg->buttons[USE_IMU_PITCH_BTN]){
+            use_imu_pitch = !use_imu_pitch;
+            if(use_imu_pitch)
+                RCLCPP_INFO(get_logger(),"enable imu pitch");
+            else
+                RCLCPP_INFO(get_logger(),"disable imu pitch");
         }
         if(msg->buttons[NORMAL_GAIT_BTN]){
             BODY_HEIGHT = NORMAL_GAIT_BODY_HEIGHT;
@@ -432,6 +440,10 @@ class Foot_Controller : public rclcpp::Node{
             target_pos_y = leg_pos[id][1];
             angle_alpha = ((data_outer.q - outer_motor_offest) / gear_ratio)*dir_outer + OUTER_MOTOR_OFFEST;
             angle_beta = ((data_inner.q - inner_motor_offest) / gear_ratio)*dir_inner + INNER_MOTOR_OFFEST;
+            if(use_imu_pitch){
+                angle_alpha -= imu_pitch;
+                angle_beta -= imu_pitch;
+            }
             vec_alpha = data_outer.dq / gear_ratio * dir_outer;
             vec_beta = data_inner.dq / gear_ratio * dir_inner;
             kineRes = Kinematic_Solution(angle_alpha,angle_beta,vec_alpha,vec_beta);

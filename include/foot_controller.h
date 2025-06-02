@@ -25,15 +25,16 @@
 #define INIT_KP_Y 2000
 #define INIT_KI_Y 0
 #define INIT_KD_Y 60
-#define STAND_UP_BTN 7
-#define SIT_DOWN_BTN 6
-#define CTR_TYPE_BTN 10
 #define BTN_A 0
 #define BTN_B 1
 #define BTN_X 2
 #define BTN_Y 3
 #define BTN_LB 4
 #define BTN_RB 5
+#define STAND_UP_BTN 7
+#define SIT_DOWN_BTN 6
+#define CTR_TYPE_BTN BTN_RB
+#define USE_IMU_PITCH_BTN BTN_LB
 #define JUMP_BTN BTN_A
 #define NORMAL_GAIT_BTN BTN_X
 #define STEP_GAIT_BTN BTN_Y
@@ -45,14 +46,14 @@
 #define NORMAL_GAIT_HEIGHT 0.1
 
 #define STEP_GAIT_PERIOD 1.2
-#define STEP_GAIT_BODY_HEIGHT 0.35
+#define STEP_GAIT_BODY_HEIGHT 0.3
 #define STEP_GAIT_FLIGHT_PERCENT 0.3
-#define STEP_GAIT_HEIGHT 0.2
+#define STEP_GAIT_HEIGHT 0.15
 
 #define LOWER_GAIT_PERIOD 0.4
 #define LOWER_GAIT_BODY_HEIGHT 0.16
 #define LOWER_GAIT_FLIGHT_PERCENT 0.5
-#define LOWER_GAIT_HEIGHT 0.05
+#define LOWER_GAIT_HEIGHT 0.04
 
 #define AXES_LX 0
 #define AXES_LY 1

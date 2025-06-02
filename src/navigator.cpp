@@ -21,7 +21,7 @@ class Navigator : public rclcpp::Node{
             ,roll;
         bool need_spin = false
             ,need_move = false;
-        PID *pid;
+        PID *pid_angle,*pid_pos;
     public:
         Navigator()
         : Node("navigator")
@@ -31,7 +31,7 @@ class Navigator : public rclcpp::Node{
             tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
             tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
             timer_ = this->create_wall_timer(
-                std::chrono::milliseconds(10),
+                std::chrono::milliseconds(100),
                 std::bind(&Navigator::timer_callback, this));
             pos_subscription_ = this->create_subscription<vmc_quadruped_controller::msg::PosReq>(
                 "pos_req", 10, std::bind(&Navigator::pos_callback, this, std::placeholders::_1));
@@ -41,7 +41,8 @@ class Navigator : public rclcpp::Node{
             // angle_subscription_ = this->create_subscription<vmc_quadruped_controller::msg::AngleReq>(
             //     "angle_req", 10, std::bind(&Navigator::angle_callback, this, std::placeholders::_1));
             move_pub = this->create_publisher<vmc_quadruped_controller::msg::MoveCmd>("move_cmd", 10);
-            pid = new PID(0.01,0,0.09,0.1);
+            pid_angle = new PID(0.01,0,0.09,0.1);
+            pid_pos = new PID(1,0,0.09,0.2);
         }
     private:
         geometry_msgs::msg::Vector3 calculate_relative_vector(
@@ -107,17 +108,17 @@ class Navigator : public rclcpp::Node{
                         "body",  // 源坐标系
                         tf2::TimePointZero);  // 获取最新可用的变换
                 
-                // RCLCPP_INFO(this->get_logger(), 
-                //     "Transform from 'map' to 'body':\n"
-                //     "Translation: [%.2f, %.2f, %.2f]\n"
-                //     "Rotation: [%.2f, %.2f, %.2f, %.2f]",
-                //     transform.transform.translation.x,
-                //     transform.transform.translation.y,
-                //     transform.transform.translation.z,
-                //     transform.transform.rotation.x,
-                //     transform.transform.rotation.y,
-                //     transform.transform.rotation.z,
-                //     transform.transform.rotation.w);
+                RCLCPP_INFO(this->get_logger(), 
+                    "Transform from 'map' to 'body':\n"
+                    "Translation: [%.2f, %.2f, %.2f]\n"
+                    "Rotation: [%.2f, %.2f, %.2f, %.2f]",
+                    transform.transform.translation.x,
+                    transform.transform.translation.y,
+                    transform.transform.translation.z,
+                    transform.transform.rotation.x,
+                    transform.transform.rotation.y,
+                    transform.transform.rotation.z,
+                    transform.transform.rotation.w);
 
                 if(need_move){
                     geometry_msgs::msg::Vector3 relative_vector = calculate_relative_vector(transform,target_point_in_map);
@@ -140,14 +141,20 @@ class Navigator : public rclcpp::Node{
                                    |
                                    +---- Y --->
                         so , (x,y) -> (-y,-x) 
+                        all of this is useless
                     */
                     float angle = atan2(relative_vector.y, relative_vector.x);
                     angle = angle/M_PI * 180.0;
-                    move_cmd.step_x = pid->calculate(0,angle);
+                    move_cmd.step_x = -pid_angle->calculate(0,angle);
+                    if(abs(angle)<10)
+                        move_cmd.step_y = pid_pos->calculate(0,relative_vector.x);
+                    else
+                        move_cmd.step_y = 0;
                     move_pub->publish(move_cmd);
-                    RCLCPP_INFO(this->get_logger(), "step_x: %.2f angle:%.2f x:%.2f y:%.2f", move_cmd.step_x,angle,relative_vector.x, relative_vector.y);
-                    if(abs(angle) < 10){
+                    RCLCPP_INFO(this->get_logger(), "step_x: %.2f step_y: %.2f angle:%.2f x:%.2f y:%.2f", move_cmd.step_x, move_cmd.step_y,angle,relative_vector.x, relative_vector.y);
+                    if(sqrt(relative_vector.y*relative_vector.y + relative_vector.x*relative_vector.x) < 0.1){
                         move_cmd.step_x = 0;
+                        move_cmd.step_y = 0;
                         move_pub->publish(move_cmd);
                         need_move = false;
                     }
@@ -173,7 +180,7 @@ class Navigator : public rclcpp::Node{
             // Log the IMU data
             // RCLCPP_INFO(this->get_logger(), "IMU Data: Pitch: %.2f, Roll: %.2f, Yaw: %.2f", pitch, roll, yaw);
             if(need_spin){
-                move_cmd.step_x = pid->calculate(target_angle,yaw);
+                move_cmd.step_x = pid_angle->calculate(target_angle,yaw);
                 move_pub->publish(move_cmd);
                 RCLCPP_INFO(this->get_logger(), "step_x: %.2f", move_cmd.step_x);
                 if(abs(target_angle - yaw) < 1){
