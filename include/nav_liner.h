@@ -8,3 +8,8 @@
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "pid.h"
 #include "sensor_msgs/msg/joy.hpp"
+
+#define AXES_VERTICAL 7 // positive is left
+#define AXES_HORIZONTAL 6 // positive is up
+
+#define AXES_SET_POS AXES_HORIZONTAL
