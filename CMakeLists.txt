@@ -31,19 +31,24 @@ rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_t
 add_executable(motor src/motor.cpp)
 add_executable(foots src/foot_controller.cpp src/kinematics.cpp src/cycloid.cpp)
 add_executable(navigator src/navigator.cpp src/pid.cpp)
+add_executable(nav_liner src/nav_liner.cpp src/pid.cpp)
+
 ament_target_dependencies(motor rclcpp)
 ament_target_dependencies(foots rclcpp sensor_msgs yesense_interface)
 ament_target_dependencies(navigator rclcpp sensor_msgs yesense_interface Eigen3 tf2_ros geometry_msgs tf2_geometry_msgs)
+ament_target_dependencies(nav_liner rclcpp sensor_msgs tf2_ros geometry_msgs tf2_geometry_msgs)
 target_link_libraries(motor ${PROJECT_SOURCE_DIR}/lib/libUnitreeMotorSDK_Arm64.so)
 target_link_libraries(foots ${PROJECT_SOURCE_DIR}/lib/libUnitreeMotorSDK_Arm64.so)
 
 target_link_libraries(motor "${cpp_typesupport_target}")
 target_link_libraries(foots "${cpp_typesupport_target}")
 target_link_libraries(navigator "${cpp_typesupport_target}")
+target_link_libraries(nav_liner "${cpp_typesupport_target}")
 install(TARGETS
   motor
   foots
   navigator
+  nav_liner
   DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY
   ${PROJECT_SOURCE_DIR}/lib/
