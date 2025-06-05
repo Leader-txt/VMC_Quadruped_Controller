@@ -8,6 +8,20 @@
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "pid.h"
 #include "sensor_msgs/msg/joy.hpp"
+#include <iostream>
+#include <fstream>
+#include <string>
+
+using namespace std;
+
+typedef struct {
+    double start_x;
+    double start_y;
+    double end_x;
+    double end_y;
+} Path;
+
+std::string POSITION_FILE="nav_liner.pos";
 
 #define AXES_VERTICAL 7 // positive is left
 #define AXES_HORIZONTAL 6 // positive is up
