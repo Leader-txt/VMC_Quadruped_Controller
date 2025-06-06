@@ -11,6 +11,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include "ament_index_cpp/get_package_share_directory.hpp"
 
 using namespace std;
 
@@ -21,9 +22,10 @@ typedef struct {
     double end_y;
 } Path;
 
-std::string POSITION_FILE="nav_liner.pos";
+std::string POSITION_FILE="/nav_liner.pos";
 
 #define AXES_VERTICAL 7 // positive is left
 #define AXES_HORIZONTAL 6 // positive is up
 
 #define AXES_SET_POS AXES_HORIZONTAL
+#define AXES_RUN AXES_VERTICAL

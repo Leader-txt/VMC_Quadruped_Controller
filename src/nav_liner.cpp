@@ -3,24 +3,33 @@
 class Nav_liner : public rclcpp::Node{
     private:
         rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription;
+        Path path;
+        std::shared_ptr<tf2_ros::TransformListener> tf_listener_{nullptr};
+        std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+        rclcpp::TimerBase::SharedPtr timer_;
+        geometry_msgs::msg::TransformStamped transform;
+        bool need_move = false;
     public:
         Nav_liner()
         : Node("nav_liner")
         {
             // Initialize the node
             RCLCPP_INFO(this->get_logger(), "nav_liner node initialized");
+            tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+            tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+            timer_ = this->create_wall_timer(
+                std::chrono::milliseconds(100),
+                std::bind(&Nav_liner::timer_callback, this));
             joy_subscription = this->create_subscription<sensor_msgs::msg::Joy>("joy",10,std::bind(&Nav_liner::joy_callback,this,std::placeholders::_1));
-            if(!isFileExists(POSITION_FILE)){
+            
+            string pkg_path = ament_index_cpp::get_package_share_directory("vmc_quadruped_controller");
+            if(!isFileExists(pkg_path + POSITION_FILE)){
                 RCLCPP_INFO(get_logger(),"file not exists");
-                Path path= {0,0,1,0};
-                ofstream ofs(POSITION_FILE,ios::out|ios::binary);
-                ofs.write((char*)&path,sizeof(Path));
+                path= {0,0,1,0};
+                writePathToFile();
             }
             else{
-                ifstream inFile(POSITION_FILE,ios::in|ios::binary);
-                Path path;
-                inFile.read((char*)&path,sizeof(Path));
-                RCLCPP_INFO(get_logger(),"file exists, start_x:%.2f start_y:%.2f end_x:%.2f end_y:%.2f",path.start_x,path.start_y,path.end_x,path.end_y);
+                readPathFromFile();
             }
         }
     private:
@@ -41,16 +50,123 @@ class Nav_liner : public rclcpp::Node{
             // }
             if(msg->axes[AXES_SET_POS] == 1){
                 RCLCPP_INFO(get_logger(),"set start position");
+                path.start_x = transform.transform.translation.x;
+                path.start_y = transform.transform.translation.y;
+                writePathToFile();
             }
             if(msg->axes[AXES_SET_POS] == -1){
                 RCLCPP_INFO(get_logger(),"set end position");
+                path.end_x = transform.transform.translation.x;
+                path.end_y = transform.transform.translation.y;
+                writePathToFile();
+            }
+            if(msg->axes[AXES_RUN] == 1){
+                RCLCPP_INFO(get_logger(),"start run");
+                need_move = true;
+            }
+            if(msg->axes[AXES_RUN] == -1){
+                RCLCPP_INFO(get_logger(),"stop run");
+                need_move = false;
             }
         }
-        bool isFileExists(std::string& name) {
+        void timer_callback()
+        {
+            try {
+                // 查找从"base_link"到"odom"的变换
+                transform = 
+                    tf_buffer_->lookupTransform(
+                        "map",       // 目标坐标系
+                        "body",  // 源坐标系
+                        tf2::TimePointZero);  // 获取最新可用的变换
+                
+                // RCLCPP_INFO(this->get_logger(), 
+                //     "Transform from 'map' to 'body':\n"
+                //     "Translation: [%.2f, %.2f, %.2f]\n"
+                //     "Rotation: [%.2f, %.2f, %.2f, %.2f]",
+                //     transform.transform.translation.x,
+                //     transform.transform.translation.y,
+                //     transform.transform.translation.z,
+                //     transform.transform.rotation.x,
+                //     transform.transform.rotation.y,
+                //     transform.transform.rotation.z,
+                //     transform.transform.rotation.w);
+                
+                // get distance from the line
+                if(need_move){
+                    // 判断在线的左边还是右边
+                    double k = (path.end_y - path.start_y) / (path.end_x - path.start_x + 1e-7);
+                    double b = path.start_y - k * path.start_x;
+                    double compared_y = k * transform.transform.translation.x + b;
+                    if(compared_y < transform.transform.translation.y){
+                        RCLCPP_INFO(get_logger(),"on the left side of the line");
+                    }
+                    else{
+                        RCLCPP_INFO(get_logger(),"on the right side of the line");
+                    }
+                    double distance = abs(k * transform.transform.translation.x - transform.transform.translation.y + b) / sqrt(k * k + 1);
+                    RCLCPP_INFO(get_logger(),"distance to the line: %.2f",distance);
+                    // calculate the angle to the line
+
+                    geometry_msgs::msg::Point direction_point;
+                    direction_point.x = transform.transform.translation.x+1;
+                    direction_point.y = transform.transform.translation.y+k;
+                    geometry_msgs::msg::Vector3 relative_vector = calculate_relative_vector(transform,direction_point);
+                    float angle = atan2(relative_vector.y, relative_vector.x);
+                    angle = angle/M_PI * 180.0;
+                    RCLCPP_INFO(get_logger(),"angle to the line %.2f",angle);
+                }
+            }
+            catch (std::exception &ex) {
+                RCLCPP_WARN(this->get_logger(), "Could not get transform: %s", ex.what());
+            }
+        }
+        geometry_msgs::msg::Vector3 calculate_relative_vector(
+        const geometry_msgs::msg::TransformStamped& transform_me_in_map,
+        const geometry_msgs::msg::Point& target_point_in_map)
+        {
+            // 1. 提取map到自身坐标系的变换
+            tf2::Transform tf_map_to_me;
+            tf2::fromMsg(transform_me_in_map.transform, tf_map_to_me);
+            
+            // 2. 计算自身坐标系到map的变换（求逆）
+            tf2::Transform tf_me_to_map = tf_map_to_me.inverse();
+            
+            // 3. 将目标点转换为tf2::Vector3
+            tf2::Vector3 target_vec(
+                target_point_in_map.x,
+                target_point_in_map.y,
+                target_point_in_map.z);
+            
+            // 4. 将目标点转换到自身坐标系
+            tf2::Vector3 target_in_me = tf_me_to_map * target_vec;
+            
+            // 5. 在自身坐标系中，自身位置是原点(0,0,0)
+            // 所以到目标点的向量就是目标点的坐标
+            geometry_msgs::msg::Vector3 relative_vector;
+            relative_vector.x = target_in_me.x();
+            relative_vector.y = target_in_me.y();
+            relative_vector.z = target_in_me.z();
+            
+            return relative_vector;
+        }
+        bool isFileExists(string name) {
             std::ifstream f(name.c_str());
             return f.good();
         }
+        void writePathToFile() {
+            string pkg_path = ament_index_cpp::get_package_share_directory("vmc_quadruped_controller");
+            ofstream ofs(pkg_path + POSITION_FILE,ios::out|ios::binary);
+            ofs.write((char*)&path,sizeof(Path));
+            RCLCPP_INFO(get_logger(),"write path to file, start_x:%.2f start_y:%.2f end_x:%.2f end_y:%.2f",path.start_x,path.start_y,path.end_x,path.end_y);
+        }
+        void readPathFromFile() {
+            string pkg_path = ament_index_cpp::get_package_share_directory("vmc_quadruped_controller");
+            ifstream inFile(pkg_path + POSITION_FILE,ios::in|ios::binary);
+            inFile.read((char*)&path,sizeof(Path));
+            RCLCPP_INFO(get_logger(),"read path from file, start_x:%.2f start_y:%.2f end_x:%.2f end_y:%.2f",path.start_x,path.start_y,path.end_x,path.end_y);
+        };
     };
+
 int main(int argc,char* argv[]){
     rclcpp::init(argc,argv);
     rclcpp::spin(std::make_shared<Nav_liner>());
