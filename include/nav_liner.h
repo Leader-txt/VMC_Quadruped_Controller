@@ -12,6 +12,7 @@
 #include <fstream>
 #include <string>
 #include "ament_index_cpp/get_package_share_directory.hpp"
+#include "vmc_quadruped_controller/msg/move_cmd.hpp"
 
 using namespace std;
 

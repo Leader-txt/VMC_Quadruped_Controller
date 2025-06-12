@@ -8,7 +8,10 @@ class Nav_liner : public rclcpp::Node{
         std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
         rclcpp::TimerBase::SharedPtr timer_;
         geometry_msgs::msg::TransformStamped transform;
+        vmc_quadruped_controller::msg::MoveCmd move_cmd;
+        rclcpp::Publisher<vmc_quadruped_controller::msg::MoveCmd>::SharedPtr move_pub;
         bool need_move = false;
+        PID *pid_angle,*pid_pos;
     public:
         Nav_liner()
         : Node("nav_liner")
@@ -22,7 +25,10 @@ class Nav_liner : public rclcpp::Node{
                 std::bind(&Nav_liner::timer_callback, this));
             joy_subscription = this->create_subscription<sensor_msgs::msg::Joy>("joy",10,std::bind(&Nav_liner::joy_callback,this,std::placeholders::_1));
             
+            move_pub = this->create_publisher<vmc_quadruped_controller::msg::MoveCmd>("move_cmd", 10);
             string pkg_path = ament_index_cpp::get_package_share_directory("vmc_quadruped_controller");
+            pid_angle = new PID(0.01,0,0.09,0.1);
+            pid_pos = new PID(1,0,0.09,0.2);
             if(!isFileExists(pkg_path + POSITION_FILE)){
                 RCLCPP_INFO(get_logger(),"file not exists");
                 path= {0,0,1,0};
@@ -97,8 +103,10 @@ class Nav_liner : public rclcpp::Node{
                     double k = (path.end_y - path.start_y) / (path.end_x - path.start_x + 1e-7);
                     double b = path.start_y - k * path.start_x;
                     double compared_y = k * transform.transform.translation.x + b;
+                    double dir = -1;
                     if(compared_y < transform.transform.translation.y){
                         RCLCPP_INFO(get_logger(),"on the left side of the line");
+                        dir = 1;
                     }
                     else{
                         RCLCPP_INFO(get_logger(),"on the right side of the line");
@@ -114,6 +122,16 @@ class Nav_liner : public rclcpp::Node{
                     float angle = atan2(relative_vector.y, relative_vector.x);
                     angle = angle/M_PI * 180.0;
                     RCLCPP_INFO(get_logger(),"angle to the line %.2f",angle);
+                    double target_angle = distance*30*dir;
+                    RCLCPP_INFO(get_logger(),"target angle %.2f",target_angle);
+                    if(abs(target_angle - angle)>5){
+                        move_cmd.step_x = -pid_angle->calculate(target_angle,angle);
+                        // move_cmd.step_y = 
+                    }
+                    else{
+                        move_cmd.step_y = 0;
+                    }
+                    move_pub->publish(move_cmd);
                 }
             }
             catch (std::exception &ex) {
