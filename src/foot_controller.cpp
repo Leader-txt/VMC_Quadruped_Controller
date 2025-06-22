@@ -114,51 +114,6 @@ class Foot_Controller : public rclcpp::Node{
                 }
             RCLCPP_INFO(this->get_logger(),"switch to normal gait");
         }
-        if(msg->buttons[STEP_GAIT_BTN] && stand_up_flag){
-            // stand up
-            float target_height = 0.38;
-            for(int time_stamp=0;time_stamp<1000;time_stamp++){
-                float height = BODY_HEIGHT + (target_height - BODY_HEIGHT) * (time_stamp/1000.0);
-                // RCLCPP_INFO(this->get_logger(),"height:%.3f",height);
-                for(int i=0;i<4;i++){
-                    leg_pos[i][0]=0;
-                    leg_pos[i][1]= height;
-                    params[i].kp_y = INIT_KP_Y;
-                    params[i].kd_y = 50;
-                    params[i].kp_x = INIT_KP_X;
-                    params[i].kd_x = INIT_KD_X;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            //sit down
-            for(int time_stamp=0;time_stamp<1000;time_stamp++){
-                float height = target_height - (target_height - BODY_HEIGHT) * (time_stamp/1000.0);
-                // RCLCPP_INFO(this->get_logger(),"height:%.3f",height);
-                for(int i=0;i<4;i++){
-                    leg_pos[i][0]=0;
-                    leg_pos[i][1]=height;
-                    params[i].kp_y = INIT_KP_Y;
-                    params[i].kd_y = INIT_KD_Y;
-                    params[i].kp_x = INIT_KP_X;
-                    params[i].kd_x = INIT_KD_X;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-        }
-        // if(msg->buttons[STEP_GAIT_BTN]){
-        //     BODY_HEIGHT = STEP_GAIT_BODY_HEIGHT;
-        //     cycloid.Height = STEP_GAIT_HEIGHT;
-        //     cycloid.FlightPercent = STEP_GAIT_FLIGHT_PERCENT;
-        //     cycloid.BodyHeight = STEP_GAIT_BODY_HEIGHT;
-        //     period = STEP_GAIT_PERIOD;
-        //     if(stand_up_flag)
-        //         for(int i=0;i<4;i++){
-        //             leg_pos[i][0]=0;
-        //             leg_pos[i][1]=BODY_HEIGHT;
-        //         }
-        //     RCLCPP_INFO(this->get_logger(),"switch to step gait");
-        // }
         if(msg->buttons[LOWER_GAIT_BTN]){
             BODY_HEIGHT = LOWER_GAIT_BODY_HEIGHT;
             cycloid.Height = LOWER_GAIT_HEIGHT;
@@ -174,6 +129,9 @@ class Foot_Controller : public rclcpp::Node{
         }
         if(msg->buttons[JUMP_BTN] && stand_up_flag && !running && !runner_exists){
             jump();
+        }
+        if(msg->buttons[JUMP_HIGH_BTN] && stand_up_flag && !running && !runner_exists){
+            jump_high();
         }
         if(msg->buttons[CTR_TYPE_BTN]){
             ctrl_by_joy = !ctrl_by_joy;
@@ -199,6 +157,61 @@ class Foot_Controller : public rclcpp::Node{
         }
     }
 
+    private: void jump_high(){
+        RCLCPP_INFO(this->get_logger(),"start jump");
+        // ready for jump
+        for(int i=0;i<4;i++){
+            leg_pos[i][0] = -0.06;
+            leg_pos[i][1] = 0.15;
+        }
+        float jump_x = -0.17;
+        float jump_height = BODY_HEIGHT+0.05;
+        // jump
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        params[0].kp_y = 5000;
+        params[0].kd_y = 30;
+        leg_pos[0][0] = jump_x;
+        leg_pos[0][1] = jump_height;
+
+        params[1].kp_y = 5500;
+        params[1].kd_y = 30;
+        leg_pos[1][0] = jump_x;
+        leg_pos[1][1] = jump_height;
+
+        params[2].kp_y = 5500;
+        params[2].kd_y = 30;
+        leg_pos[2][0] = jump_x;
+        leg_pos[2][1] = jump_height;
+
+        params[3].kp_y = 5000;
+        params[3].kd_y = 30;
+        leg_pos[3][0] = jump_x;
+        leg_pos[3][1] = jump_height;
+        // fall down
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        for(int i=0;i<4;i++){
+            
+            params[i].kp_y = 800;
+            params[i].kd_y = 40;
+            params[i].kp_x = 800;
+            params[i].kd_x = 40;
+            params[i].kp_x = INIT_KP_X;
+            leg_pos[i][0] = 0.06;
+            leg_pos[i][1] = BODY_HEIGHT;
+        }
+        // release
+        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        for(int i=0;i<4;i++){
+            params[i].kp_y = INIT_KP_Y;
+            params[i].kd_y = INIT_KD_Y;
+            params[i].kp_x = INIT_KP_X;
+            params[i].kd_x = INIT_KD_X;
+            leg_pos[i][0] = 0;
+            leg_pos[i][1] = BODY_HEIGHT;
+        }
+        RCLCPP_INFO(this->get_logger(),"end jump");
+    }
+
     private: void jump(){
         RCLCPP_INFO(this->get_logger(),"start jump");
         // ready for jump
@@ -209,22 +222,22 @@ class Foot_Controller : public rclcpp::Node{
         float jump_x = -0.08;
         // jump
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        params[0].kp_y = 4500;
+        params[0].kp_y = 5000;
         params[0].kd_y = 40;
         leg_pos[0][0] = jump_x;
         leg_pos[0][1] = BODY_HEIGHT;
 
-        params[1].kp_y = 4000;
+        params[1].kp_y = 4500;
         params[1].kd_y = 40;
         leg_pos[1][0] = jump_x;
         leg_pos[1][1] = BODY_HEIGHT;
 
-        params[2].kp_y = 4000;
+        params[2].kp_y = 4500;
         params[2].kd_y = 40;
         leg_pos[2][0] = jump_x;
         leg_pos[2][1] = BODY_HEIGHT;
 
-        params[3].kp_y = 4500;
+        params[3].kp_y = 5000;
         params[3].kd_y = 40;
         leg_pos[3][0] = jump_x;
         leg_pos[3][1] = BODY_HEIGHT;
@@ -454,13 +467,13 @@ class Foot_Controller : public rclcpp::Node{
         cmd_inner.tau = -0.1 * dir_inner;
         SendMsg(&data_outer,&cmd_outer,serial);
         SendMsg(&data_inner,&cmd_inner,serial);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         // release
         cmd_outer.tau = 0;
         cmd_inner.tau = 0;
         SendMsg(&data_outer,&cmd_outer,serial);
         SendMsg(&data_inner,&cmd_inner,serial);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         // save motor offests
         float outer_motor_offest = data_outer.q
             ,inner_motor_offest = data_inner.q;
