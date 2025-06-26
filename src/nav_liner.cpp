@@ -12,6 +12,7 @@ class Nav_liner : public rclcpp::Node{
         rclcpp::Publisher<vmc_quadruped_controller::msg::MoveCmd>::SharedPtr move_pub;
         bool need_move = false;
         PID *pid_angle,*pid_pos;
+        float step_y = 0;
     public:
         Nav_liner()
         : Node("nav_liner")
@@ -126,10 +127,18 @@ class Nav_liner : public rclcpp::Node{
                     RCLCPP_INFO(get_logger(),"target angle %.2f",target_angle);
                     if(abs(target_angle - angle)>5){
                         move_cmd.step_x = -pid_angle->calculate(target_angle,angle);
-                        // move_cmd.step_y = 
                     }
                     else{
-                        move_cmd.step_y = 0;
+                        move_cmd.step_x = 0;
+                    }
+                    if(transform.transform.translation.x < path.end_x){
+                        step_y = step_y + 0.1*(-0.2 - step_y);
+                        move_cmd.step_y = step_y;
+                    }
+                    else{
+                        step_y = 0;
+                        move_cmd.step_y = step_y;
+                        need_move = false;
                     }
                     move_pub->publish(move_cmd);
                 }
