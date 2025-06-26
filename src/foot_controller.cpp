@@ -164,43 +164,62 @@ class Foot_Controller : public rclcpp::Node{
             leg_pos[i][0] = -0.06;
             leg_pos[i][1] = 0.15;
         }
-        float jump_x = -0.17;
-        float jump_height = BODY_HEIGHT+0.05;
+        float jump_x = -0.18;
+        float jump_height = BODY_HEIGHT+0.10;
         // jump
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        params[0].kp_y = 5000;
-        params[0].kd_y = 30;
+        params[0].kp_y = 5500;
+        params[0].kd_y = 20;
+        params[0].kp_x = 5000;
+        params[0].kd_x = 80;
         leg_pos[0][0] = jump_x;
-        leg_pos[0][1] = jump_height;
+        leg_pos[0][1] = jump_height - 0.0;
 
         params[1].kp_y = 5500;
-        params[1].kd_y = 30;
+        params[1].kd_y = 20;
+        params[1].kp_x = 5000;
+        params[1].kd_x = 80;
         leg_pos[1][0] = jump_x;
-        leg_pos[1][1] = jump_height;
+        leg_pos[1][1] = jump_height + 0.03;
 
         params[2].kp_y = 5500;
-        params[2].kd_y = 30;
+        params[2].kd_y = 20;
+        params[2].kp_x = 5000;
+        params[2].kd_x = 80;
         leg_pos[2][0] = jump_x;
-        leg_pos[2][1] = jump_height;
+        leg_pos[2][1] = jump_height + 0.03;
 
-        params[3].kp_y = 5000;
-        params[3].kd_y = 30;
+        params[3].kp_y = 5500;
+        params[3].kd_y = 20;
+        params[3].kp_x = 5000;
+        params[3].kd_x = 80;
         leg_pos[3][0] = jump_x;
-        leg_pos[3][1] = jump_height;
+        leg_pos[3][1] = jump_height - 0.0;
         // fall down
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::this_thread::sleep_for(std::chrono::milliseconds(170));
         for(int i=0;i<4;i++){
             
-            params[i].kp_y = 800;
+            params[i].kp_y = 500;
             params[i].kd_y = 40;
-            params[i].kp_x = 800;
+            params[i].kp_x = 500;
             params[i].kd_x = 40;
             params[i].kp_x = INIT_KP_X;
-            leg_pos[i][0] = 0.06;
+            leg_pos[i][0] = -0.06;
+            leg_pos[i][1] = BODY_HEIGHT - 0.03;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        for(int i=0;i<4;i++){
+            
+            params[i].kp_y = 500;
+            params[i].kd_y = 40;
+            params[i].kp_x = 500;
+            params[i].kd_x = 40;
+            params[i].kp_x = INIT_KP_X;
+            leg_pos[i][0] = 0.10;
             leg_pos[i][1] = BODY_HEIGHT;
         }
         // release
-        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1300));
         for(int i=0;i<4;i++){
             params[i].kp_y = INIT_KP_Y;
             params[i].kd_y = INIT_KD_Y;
@@ -301,18 +320,22 @@ class Foot_Controller : public rclcpp::Node{
     private: void run(){
         running = true;
         runner_exists = true;
-        float step_length = 0.30;
+        float step_length = 0.40;
         double intpart;
         float t;
-        bool isFlightPercent[4]={0,0,0,0};
+        // bool isFlightPercent[4]={0,0,0,0};
         // float flight = 2000
         //     ,noflight = 2000
         //     ,flight_kd = 80
         //     ,noflight_kd = 80;
         CycloidResult res;
+        float local_step_x = 0
+            ,local_step_y = 0;
         while(running && rclcpp::ok()){
             t = modf(rclcpp::Clock().now().seconds()/period,&intpart);
-            cycloid.Length = step_y * step_length + step_x * step_length;
+            local_step_x = local_step_x + CTRL_X_KD * (step_x - local_step_x);
+            local_step_y = local_step_y + CTRL_Y_KD * (step_y - local_step_y);
+            cycloid.Length = local_step_y * step_length + local_step_x * step_length;
             res = cycloid.generate(0.25+t);
             // if(res.isFlightPercent != isFlightPercent[2]){
             //     isFlightPercent[2] = res.isFlightPercent;
@@ -342,7 +365,7 @@ class Foot_Controller : public rclcpp::Node{
             leg_pos[3][0] = res.x;
             leg_pos[3][1] = res.y;
 
-            cycloid.Length = step_y * step_length - step_x * step_length;
+            cycloid.Length = local_step_y * step_length - local_step_x * step_length;
             res = cycloid.generate(0.25+t);
             // if(res.isFlightPercent != isFlightPercent[0]){
             //     isFlightPercent[0] = res.isFlightPercent;
