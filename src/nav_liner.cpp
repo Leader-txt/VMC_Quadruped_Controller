@@ -28,7 +28,7 @@ class Nav_liner : public rclcpp::Node{
             
             move_pub = this->create_publisher<vmc_quadruped_controller::msg::MoveCmd>("move_cmd", 10);
             string pkg_path = ament_index_cpp::get_package_share_directory("vmc_quadruped_controller");
-            pid_angle = new PID(0.01,0,0.09,0.1);
+            pid_angle = new PID(0.01,0,0.09,0.2);
             pid_pos = new PID(1,0,0.09,0.2);
             if(!isFileExists(pkg_path + POSITION_FILE)){
                 RCLCPP_INFO(get_logger(),"file not exists");
@@ -127,12 +127,13 @@ class Nav_liner : public rclcpp::Node{
                     direction_point.x = transform.transform.translation.x+1;
                     direction_point.y = transform.transform.translation.y+k;
                     geometry_msgs::msg::Vector3 relative_vector = calculate_relative_vector(transform,direction_point);
+
                     float angle = atan2(relative_vector.y, relative_vector.x);
                     angle = angle/M_PI * 180.0;
                     RCLCPP_INFO(get_logger(),"angle to the line %.2f",angle);
-                    double target_angle = distance*40*dir;
+                    double target_angle = distance*30*dir;
                     RCLCPP_INFO(get_logger(),"target angle %.2f",target_angle);
-                    if(abs(target_angle - angle)>3){
+                    if(abs(target_angle - angle)>5){
                         // step_x = step_x + STEP_X_KD*(-pid_angle->calculate(target_angle,angle) - step_x);
                         move_cmd.step_x = -pid_angle->calculate(target_angle,angle);
                     }
@@ -207,6 +208,7 @@ class Nav_liner : public rclcpp::Node{
     };
 
 int main(int argc,char* argv[]){
+    cout << "1" << endl;
     rclcpp::init(argc,argv);
     rclcpp::spin(std::make_shared<Nav_liner>());
     rclcpp::shutdown();
