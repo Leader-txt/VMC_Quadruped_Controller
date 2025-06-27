@@ -30,3 +30,6 @@ std::string POSITION_FILE="/nav_liner.pos";
 
 #define AXES_SET_POS AXES_HORIZONTAL
 #define AXES_RUN AXES_VERTICAL
+
+#define STEP_X_KD 0.05
+#define STEP_Y_KD 0.03

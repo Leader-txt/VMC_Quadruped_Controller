@@ -12,7 +12,7 @@ class Nav_liner : public rclcpp::Node{
         rclcpp::Publisher<vmc_quadruped_controller::msg::MoveCmd>::SharedPtr move_pub;
         bool need_move = false;
         PID *pid_angle,*pid_pos;
-        float step_y = 0;
+        float step_y = 0,step_x = 0;
     public:
         Nav_liner()
         : Node("nav_liner")
@@ -70,10 +70,17 @@ class Nav_liner : public rclcpp::Node{
             if(msg->axes[AXES_RUN] == 1){
                 RCLCPP_INFO(get_logger(),"start run");
                 need_move = true;
+                step_y = 0;
+                step_x = 0;
             }
             if(msg->axes[AXES_RUN] == -1){
                 RCLCPP_INFO(get_logger(),"stop run");
                 need_move = false;
+                step_y = 0;
+                step_x = 0;
+                move_cmd.step_x = 0;
+                move_cmd.step_y = 0;
+                move_pub->publish(move_cmd);
             }
         }
         void timer_callback()
@@ -123,21 +130,26 @@ class Nav_liner : public rclcpp::Node{
                     float angle = atan2(relative_vector.y, relative_vector.x);
                     angle = angle/M_PI * 180.0;
                     RCLCPP_INFO(get_logger(),"angle to the line %.2f",angle);
-                    double target_angle = distance*30*dir;
+                    double target_angle = distance*40*dir;
                     RCLCPP_INFO(get_logger(),"target angle %.2f",target_angle);
-                    if(abs(target_angle - angle)>5){
+                    if(abs(target_angle - angle)>3){
+                        // step_x = step_x + STEP_X_KD*(-pid_angle->calculate(target_angle,angle) - step_x);
                         move_cmd.step_x = -pid_angle->calculate(target_angle,angle);
                     }
                     else{
+                        // step_x = step_x + STEP_X_KD*(0-step_x);
                         move_cmd.step_x = 0;
                     }
+                    // move_cmd.step_x = step_x;
+                    // move_cmd.step_x = -pid_angle->calculate(target_angle,angle);
                     if(transform.transform.translation.x < path.end_x){
-                        step_y = step_y + 0.1*(-0.2 - step_y);
+                        step_y = step_y + STEP_Y_KD*(-1 - step_y);
                         move_cmd.step_y = step_y;
                     }
                     else{
                         step_y = 0;
                         move_cmd.step_y = step_y;
+                        move_cmd.step_x = 0;
                         need_move = false;
                     }
                     move_pub->publish(move_cmd);
