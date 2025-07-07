@@ -28,7 +28,7 @@ class Nav_liner : public rclcpp::Node{
             
             move_pub = this->create_publisher<vmc_quadruped_controller::msg::MoveCmd>("move_cmd", 10);
             string pkg_path = ament_index_cpp::get_package_share_directory("vmc_quadruped_controller");
-            pid_angle = new PID(0.01,0,0.09,0.2);
+            pid_angle = new PID(0.01,0,0.09,0.1);
             pid_pos = new PID(1,0,0.09,0.2);
             if(!isFileExists(pkg_path + POSITION_FILE)){
                 RCLCPP_INFO(get_logger(),"file not exists");
@@ -208,7 +208,6 @@ class Nav_liner : public rclcpp::Node{
     };
 
 int main(int argc,char* argv[]){
-    cout << "1" << endl;
     rclcpp::init(argc,argv);
     rclcpp::spin(std::make_shared<Nav_liner>());
     rclcpp::shutdown();
